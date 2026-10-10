@@ -1,6 +1,16 @@
-# reSpeaker Flex XVF3800 EVK — Bring-up Toolkit
+# XVF3800 麥克風陣列研發：從黑盒子到自己的 Beamformer
 
 [English](README.md) | **繁體中文**
+
+**從外部量測解析商用語音 DSP，從頭重建它的訊號處理鏈，並在同樣的條件下比較兩者。**
+
+| 問題 | 答案與證據 |
+|---|---|
+| 封閉的商用語音 DSP，沒有原始碼也能理解嗎？ | 可以到一定程度：時脈角色、座標系統和處理管線結構，全部從介面量測推出來（見「黑箱特性分析」） |
+| 只用原始麥克風，能重現它的定位嗎？ | 自己的 SRP-PHAT 跟晶片**中位數差 2°**（[R006](logs/R006_srp_phat_doa_vs_xvf.md)） |
+| 這個陣列用哪種 beamforming 最好？ | 實作 4 種並公平比較，**MVDR + Wiener（MWF）**：SNR **+11.4 dB**、STOI **0.72 → 0.80**（[R009](logs/R009_fair_eval_shadow_filtering.md)） |
+| 怎麼確定數字是誠實的？ | 訓練和評分用不同時段、數位混合 + shadow filtering，並證明簡單的 SNR 指標可以被操控（[R008](logs/R008_mwf_postfilter_and_metric_limits.md)） |
+| 要拿到原始麥克風訊號，做了什麼？ | 自己實作 XMOS 的 I2C DFU 協定：板子沒有 SafeMode 鈕，預設韌體也沒有開 USB（[R005](logs/R005_xvf_usb6ch_via_i2c_dfu.md)） |
 
 讓 **Seeed reSpeaker Flex XVF3800 + XIAO ESP32S3** 這套 EVK 可以在 PC 上**收音、錄音、看 DSP 狀態、控制 beamforming**。
 

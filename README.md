@@ -1,15 +1,18 @@
 <div align="center">
 
-# reSpeaker Flex XVF3800 — EVK Bring-up Toolkit
+# XVF3800 Mic-Array R&D — from Black Box to Own Beamformer
 
-**From an unknown dev board to a working voice front-end: firmware, host tools and a live web console for the XMOS XVF3800 4-mic array.**
+**Characterising a commercial voice DSP from the outside, rebuilding its signal chain from scratch, and measuring both on equal terms.**
 
+*XMOS XVF3800 · 4-mic array · ESP32-S3 · SRP-PHAT · MVDR · multichannel Wiener filter · I2C DFU*
+
+![Algorithms](https://img.shields.io/badge/algorithms-SRP--PHAT%20%7C%20MVDR%20%7C%20MWF-8b5cf6)
+![Evaluation](https://img.shields.io/badge/evaluation-shadow%20filtering%20%7C%20STOI-1f9d55)
 ![Platform](https://img.shields.io/badge/MCU-ESP32--S3-E7352C?logo=espressif&logoColor=white)
 ![DSP](https://img.shields.io/badge/DSP-XMOS%20XVF3800-0A6CBA)
 ![Firmware](https://img.shields.io/badge/firmware-PlatformIO%20%7C%20Arduino-F5822A?logo=platformio&logoColor=white)
 ![Host](https://img.shields.io/badge/host-Python%203.10%2B-3776AB?logo=python&logoColor=white)
 ![GUI](https://img.shields.io/badge/GUI-zero--dependency%20web%20app-555)
-![Status](https://img.shields.io/badge/status-recording%20%E2%9C%93-1f9d55)
 
 **English** | [繁體中文](README.zh-TW.md)
 
@@ -19,11 +22,21 @@
 
 ---
 
+## At a glance
+
+| Question | Answer, with evidence |
+|---|---|
+| Can a closed commercial voice DSP be understood without its source? | Yes, to a useful degree — clock role, coordinate frame and pipeline structure were inferred purely from interface measurements ([§ black-box characterisation](#1--black-box-characterisation-of-the-xvf3800)) |
+| Can its localisation be reproduced from the raw microphones? | Own SRP-PHAT agrees with the chip to a **2° median** ([R006](logs/R006_srp_phat_doa_vs_xvf.md)) |
+| Which beamforming design works best on this array? | Four designs implemented and compared fairly — **MVDR + Wiener (MWF)**: **+11.4 dB SNR**, STOI **0.72 → 0.80** ([R009](logs/R009_fair_eval_shadow_filtering.md)) |
+| How do you know the numbers are honest? | Separate train/test spans, digital mixing with shadow filtering, and an audit showing why the naive SNR metric is gameable ([R008](logs/R008_mwf_postfilter_and_metric_limits.md)) |
+| What did it take to get raw microphone data at all? | An own I2C implementation of the XMOS DFU protocol — the board has no SafeMode button and its default image exposes no USB ([R005](logs/R005_xvf_usb6ch_via_i2c_dfu.md)) |
+
 ## What this is
 
 The [Seeed reSpeaker Flex](https://wiki.seeedstudio.com/respeaker_flex_introduction/) pairs an **XMOS XVF3800** voice processor (AEC, beamforming, noise suppression, AGC, VAD, DoA) with a **XIAO ESP32-S3** host. Out of the box it does nothing visible on a PC — the audio goes over I2S to the ESP32, and the vendor material for that path is incomplete and, on one critical point, wrong.
 
-This repository is the complete bring-up of that kit:
+The work went beyond using the kit: first make it observable, then open the black box from the outside, then rebuild the signal chain from first principles and measure it against the chip. This repository contains every layer of that:
 
 - **ESP32-S3 firmware** — a line-based control shell that drives the XVF3800 over I2C, captures its processed audio over I2S, and streams PCM to the PC loss-free.
 - **Host toolkit (Python)** — name-based access to all **121 XVF3800 control parameters**, WAV recording, a scripted smoke test, DSP health monitoring and a beamforming A/B test.
