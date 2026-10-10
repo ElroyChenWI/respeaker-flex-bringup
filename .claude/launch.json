@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "evk-gui",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["-3.11", "host/evk_gui.py", "--port", "COM8", "--http", "8765"],
+      "port": 8765
+    }
+  ]
+}

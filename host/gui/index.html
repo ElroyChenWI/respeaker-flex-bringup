@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>reSpeaker Flex EVK</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --ink: #1d2330; --muted: #6b7385; --line: #e2e5ea;
+    --accent: #2f6fde; --ok: #1f9d55; --warn: #d98a00; --bad: #d64545;
+    --l: #2f6fde; --r: #c2410c; --doa: #1f9d55; --scan: #9aa3b2; --fixed: #8b5cf6;
+    --meter-bg: #eceff3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12151b; --panel: #1b2029; --ink: #e6e9ef; --muted: #8b93a5; --line: #2a303b;
+      --accent: #5b8ff0; --l: #5b8ff0; --r: #f08a4b; --meter-bg: #262c37; --scan: #5d6676;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", "Microsoft JhengHei", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 14px 20px;
+           border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0 8px 0 0; font-weight: 650; }
+  .pill { padding: 3px 10px; border-radius: 999px; font-size: 12px; background: var(--meter-bg); color: var(--muted); }
+  .pill.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  .pill.bad { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+  .pill.warn { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+  .spacer { flex: 1; }
+  main { display: grid; gap: 16px; padding: 16px 20px 40px;
+         grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); max-width: 1500px; margin: 0 auto; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+  section h2 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  .wide { grid-column: 1 / -1; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .meter { position: relative; height: 18px; background: var(--meter-bg); border-radius: 5px; overflow: hidden; flex: 1; }
+  .meter .bar { position: absolute; inset: 0 auto 0 0; width: 0; transition: width .12s linear; }
+  .meter .pk { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink); opacity: .55; }
+  .lab { width: 26px; font-weight: 600; }
+  .val { width: 84px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  canvas { width: 100%; display: block; }
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .stat { background: var(--bg); border-radius: 8px; padding: 10px 12px; }
+  .stat .k { font-size: 12px; color: var(--muted); }
+  .stat .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .stat .s { font-size: 12px; color: var(--muted); }
+  button, select, input { font: inherit; color: var(--ink); background: var(--panel);
+         border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.rec { background: var(--bad); border-color: var(--bad); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  input[type=number] { width: 80px; }
+  input[type=range] { flex: 1; accent-color: var(--fixed); }
+  .list { max-height: 260px; overflow: auto; border-top: 1px solid var(--line); margin-top: 10px; }
+  .item { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .item:hover { background: var(--bg); }
+  .item.sel { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .item .name { flex: 1; font-family: ui-monospace, Consolas, monospace; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  .muted { color: var(--muted); font-size: 12px; }
+  audio { width: 100%; margin-top: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--panel); }
+  td.mono, .mono { font-family: ui-monospace, Consolas, monospace; }
+  .tablewrap { max-height: 420px; overflow: auto; margin-top: 10px; }
+  .msg { min-height: 18px; font-size: 12px; margin-top: 8px; }
+  .msg.err { color: var(--bad); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .speech { width: 12px; height: 12px; border-radius: 50%; background: var(--meter-bg); display: inline-block; vertical-align: -1px; }
+  .speech.on { background: var(--doa); box-shadow: 0 0 10px var(--doa); }
+  @media (max-width: 520px) { main { padding: 12px 16px; } header { padding: 12px 16px; } .stats { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>reSpeaker Flex XVF3800 EVK</h1>
+  <span id="conn" class="pill">連線中…</span>
+  <span id="build" class="pill">—</span>
+  <span id="busy" class="pill warn" hidden></span>
+  <span class="spacer"></span>
+  <label class="row muted"><input type="checkbox" id="pollToggle" checked> 即時更新</label>
+</header>
+
+<main>
+  <section>
+    <h2>音量 (I2S 輸入，dBFS)</h2>
+    <div class="row"><span class="lab" style="color:var(--l)">L</span>
+      <div class="meter"><div class="bar" id="barL" style="background:var(--l)"></div><div class="pk" id="pkL"></div></div>
+      <span class="val" id="valL">—</span></div>
+    <div class="row" style="margin-top:8px"><span class="lab" style="color:var(--r)">R</span>
+      <div class="meter"><div class="bar" id="barR" style="background:var(--r)"></div><div class="pk" id="pkR"></div></div>
+      <span class="val" id="valR">—</span></div>
+    <canvas id="hist" height="150" style="margin-top:14px"></canvas>
+    <div class="legend"><span><i style="background:var(--l)"></i>L RMS</span><span><i style="background:var(--r)"></i>R RMS</span><span>最近 20 秒，範圍 −90 ～ 0 dBFS</span></div>
+    <div class="muted" id="routing" style="margin-top:6px">輸出路由：—</div>
+  </section>
+
+  <section>
+    <h2>方向 (Beam / DoA) <span class="speech" id="speechDot" title="speech detected"></span></h2>
+    <canvas id="compass" height="300"></canvas>
+    <div class="legend">
+      <span><i style="background:var(--doa)"></i>DoA（有人說話時）</span>
+      <span><i style="background:var(--accent)"></i>自動選擇 beam</span>
+      <span><i style="background:var(--scan)"></i>自由掃描 beam</span>
+      <span><i style="background:var(--fixed)"></i>固定 beam 1 / 2</span>
+    </div>
+    <div class="muted" style="margin-top:6px">座標跟 AEC_MIC_ARRAY_GEO 一致：0° = +x（右），逆時針為正。灰點 = 麥克風位置。</div>
+  </section>
+
+  <section>
+    <h2>XVF3800 DSP 狀態</h2>
+    <div class="stats">
+      <div class="stat"><div class="k">AGC 增益</div><div class="v" id="agc">—</div><div class="s">PP_AGCGAIN（上限 32）</div></div>
+      <div class="stat"><div class="k">AEC 收斂</div><div class="v" id="aec">—</div><div class="s">要有播放參考訊號才會收斂</div></div>
+      <div class="stat"><div class="k">AEC thread 餘裕</div><div class="v" id="idleAec">—</div><div class="s" id="idleAecMin">min —</div></div>
+      <div class="stat"><div class="k">PP thread 餘裕</div><div class="v" id="idlePp">—</div><div class="s" id="idlePpMin">min —</div></div>
+    </div>
+    <div class="muted" style="margin:12px 0 6px">各 beam 語音能量（log 刻度）</div>
+    <div id="energy"></div>
+  </section>
+
+  <section>
+    <h2>錄音</h2>
+    <div class="row">
+      <label>秒數 <input type="number" id="recSec" value="5" min="1" max="120"></label>
+      <label>位元 <select id="recBits"><option value="16">16-bit</option><option value="32">32-bit</option></select></label>
+      <button class="rec" id="recBtn">● 錄音</button>
+    </div>
+    <div class="msg" id="recMsg"></div>
+    <canvas id="wave" height="110" style="margin-top:6px"></canvas>
+    <audio id="player" controls></audio>
+    <div class="list" id="recList"></div>
+  </section>
+
+  <section>
+    <h2>Beamforming 控制（暫時，不存檔）</h2>
+    <div class="row">
+      <button id="presetDefault">預設輸出 (8,0)/(7,3)</button>
+      <button id="presetRaw">原始麥克風 (1,0)/(1,1)</button>
+      <button id="presetBeams" class="primary">固定 beam → L/R</button>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <label class="row"><input type="checkbox" id="fixedOn"> 固定 beam 模式</label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <span class="muted" style="width:70px">beam 1</span>
+      <input type="range" id="az1" min="0" max="359" value="0">
+      <span class="val" id="az1v">0°</span>
+    </div>
+    <div class="row muted" style="margin-top:4px">beam 2 自動放在 beam 1 的反方向（+180°）</div>
+    <div class="msg" id="beamMsg"></div>
+    <div class="muted">玩法：按「固定 beam → L/R」，從某個方向講話，拖 beam 1 對準你：L（對準）會比 R（背對）大聲。重開機就會恢復原設定。</div>
+  </section>
+
+  <section class="wide">
+    <h2>XVF3800 參數</h2>
+    <div class="row">
+      <input id="pFilter" placeholder="搜尋，例如 AGC、LED、DOA" style="flex:1;min-width:200px">
+      <span class="muted" id="pCount"></span>
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>名稱</th><th>型別</th><th>存取</th><th>目前值</th><th>寫入</th><th>說明</th></tr></thead>
+      <tbody id="pBody"></tbody>
+    </table></div>
+    <div class="msg" id="pMsg"></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const api = async (path, body) => {
+  const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (!r.ok || j.error) throw new Error(j.error || r.statusText);
+  return j;
+};
+const CAT = { 0: "靜音", 1: "原始麥克風", 3: "麥克風(增益+延遲)", 4: "參考", 6: "處理後 beam", 7: "AEC 殘差/ASR beam", 8: "使用者選擇輸出", 9: "SHF 後輸出" };
+const routeName = (op) => op ? `(${op[0]},${op[1]}) ${CAT[op[0]] ?? "category " + op[0]}` : "—";
+
+// ---------- canvases ----------
+function fit(c) {
+  // remember the CSS height once: setting c.height below rewrites the attribute
+  if (!c.dataset.h) c.dataset.h = c.getAttribute("height");
+  const dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = +c.dataset.h;
+  if (c.width !== Math.round(w * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); c.style.height = h + "px"; }
+  const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); return [g, w, h];
+}
+const HIST_N = 130, hist = { L: [], R: [] };
+const dbToFrac = (db) => Math.max(0, Math.min(1, (db + 90) / 90));
+
+function drawHist() {
+  const [g, w, h] = fit($("hist"));
+  g.clearRect(0, 0, w, h);
+  g.strokeStyle = css("--line"); g.lineWidth = 1; g.fillStyle = css("--muted"); g.font = "11px system-ui";
+  for (const db of [-80, -60, -40, -20]) { const y = h - dbToFrac(db) * h; g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); g.fillText(db, 4, y - 2); }
+  for (const [k, col] of [["L", "--l"], ["R", "--r"]]) {
+    const a = hist[k]; if (a.length < 2) continue;
+    g.strokeStyle = css(col); g.lineWidth = 1.8; g.beginPath();
+    a.forEach((db, i) => { const x = w - (a.length - 1 - i) * (w / (HIST_N - 1)); const y = h - dbToFrac(db) * h; i ? g.lineTo(x, y) : g.moveTo(x, y); });
+    g.stroke();
+  }
+}
+
+const MICS = [[0.0222, -0.0222], [0.0222, 0.0222], [-0.0222, 0.0222], [-0.0222, -0.0222]];
+function drawCompass(s) {
+  const [g, w, h] = fit($("compass"));
+  g.clearRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 22;
+  g.strokeStyle = css("--line"); g.lineWidth = 1;
+  for (const f of [1, .66, .33]) { g.beginPath(); g.arc(cx, cy, R * f, 0, 2 * Math.PI); g.stroke(); }
+  g.fillStyle = css("--muted"); g.font = "11px system-ui"; g.textAlign = "center"; g.textBaseline = "middle";
+  for (let d = 0; d < 360; d += 30) {
+    const a = d * Math.PI / 180, x = cx + Math.cos(a) * (R + 12), y = cy - Math.sin(a) * (R + 12);
+    g.fillText(d + "°", x, y);
+  }
+  // mics (array is 44 mm: scale so it is visible)
+  const ms = R * 0.18 / 0.0222;
+  g.fillStyle = css("--scan");
+  MICS.forEach(([x, y], i) => { g.beginPath(); g.arc(cx + x * ms, cy - y * ms, 5, 0, 2 * Math.PI); g.fill(); g.fillText(i, cx + x * ms * 1.7, cy - y * ms * 1.7); });
+  if (!s || !s.azimuth_deg) return;
+  const ray = (deg, col, len, width, dash) => {
+    const a = deg * Math.PI / 180; g.strokeStyle = col; g.lineWidth = width; g.setLineDash(dash || []);
+    g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * R * len, cy - Math.sin(a) * R * len); g.stroke(); g.setLineDash([]);
+    g.fillStyle = col; g.beginPath(); g.arc(cx + Math.cos(a) * R * len, cy - Math.sin(a) * R * len, width + 2, 0, 2 * Math.PI); g.fill();
+  };
+  const [b1, b2, scan, auto] = s.azimuth_deg;
+  ray(scan, css("--scan"), .8, 2, [4, 4]);
+  if (s.fixed_beams) { ray(b1, css("--fixed"), .95, 3); ray(b2, css("--fixed"), .6, 2, [6, 3]); }
+  ray(auto, css("--accent"), .9, 3);
+  if (s.speech) ray(s.doa, css("--doa"), 1, 4);
+}
+
+function drawWave(buf) {
+  const [g, w, h] = fit($("wave"));
+  g.clearRect(0, 0, w, h);
+  if (!buf) return;
+  const half = h / 2;
+  for (let c = 0; c < Math.min(2, buf.numberOfChannels); c++) {
+    const d = buf.getChannelData(c), step = Math.max(1, Math.floor(d.length / w));
+    g.strokeStyle = css(c ? "--r" : "--l"); g.globalAlpha = .85; g.beginPath();
+    const y0 = c ? half + half / 2 : half / 2;
+    for (let x = 0; x < w; x++) {
+      let mn = 1, mx = -1;
+      for (let i = x * step; i < (x + 1) * step && i < d.length; i++) { const v = d[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+      // x8: speech sits far below full scale
+      g.moveTo(x + .5, y0 - Math.min(1, mx * 8) * half / 2 * .95); g.lineTo(x + .5, y0 - Math.max(-1, mn * 8) * half / 2 * .95);
+    }
+    g.stroke(); g.globalAlpha = 1;
+  }
+  g.fillStyle = css("--muted"); g.font = "11px system-ui"; g.fillText("L (×8 顯示)", 4, 12); g.fillText("R (×8 顯示)", 4, half + 12);
+}
+
+// ---------- status loop ----------
+let last = null;
+function renderStatus(s) {
+  last = s;
+  const conn = $("conn");
+  if (s.connected) { conn.textContent = "已連線 COM"; conn.className = "pill ok"; }
+  else { conn.textContent = "未連線" + (s.error ? "：" + s.error : ""); conn.className = "pill bad"; }
+  $("build").textContent = s.xvf_build ? `XVF ${s.xvf_version} · ${s.xvf_build}` : "—";
+  $("busy").hidden = !s.busy; $("busy").textContent = s.busy || "";
+  if (!s.level) return;
+  for (const k of ["L", "R"]) {
+    const db = s.level[k], pk = s.level[k + "pk"];
+    $("bar" + k).style.width = (dbToFrac(db) * 100) + "%";
+    $("pk" + k).style.left = (dbToFrac(pk) * 100) + "%";
+    $("val" + k).textContent = db.toFixed(1);
+    hist[k].push(db); if (hist[k].length > HIST_N) hist[k].shift();
+  }
+  drawHist(); drawCompass(s);
+  $("speechDot").className = "speech" + (s.speech ? " on" : "");
+  $("agc").textContent = s.agc_gain.toFixed(2);
+  $("aec").textContent = s.aec_converged ? "是" : "否";
+  $("idleAec").textContent = s.idle.aec.toLocaleString(); $("idleAecMin").textContent = "min " + s.idle.aec_min.toLocaleString();
+  $("idlePp").textContent = s.idle.pp.toLocaleString(); $("idlePpMin").textContent = "min " + s.idle.pp_min.toLocaleString();
+  const names = ["beam 1", "beam 2", "掃描", "自動"];
+  $("energy").innerHTML = s.speech_energy.map((e, i) => {
+    const f = e > 0 ? Math.min(1, Math.max(0, (Math.log10(e) + 4) / 8)) : 0;
+    return `<div class="row" style="margin:4px 0"><span class="muted" style="width:52px">${names[i]}</span>
+      <div class="meter" style="height:10px"><div class="bar" style="width:${f * 100}%;background:var(--doa)"></div></div>
+      <span class="val">${e > 0 ? e.toExponential(1) : "0"}</span></div>`;
+  }).join("");
+  $("routing").textContent = `輸出路由：L = ${routeName(s.op_l)}，R = ${routeName(s.op_r)}`;
+  if (document.activeElement !== $("fixedOn")) $("fixedOn").checked = !!s.fixed_beams;
+}
+async function loop() {
+  try { renderStatus(await api("/api/status")); } catch (e) { renderStatus({ connected: false, error: "GUI server 沒回應" }); }
+  setTimeout(loop, 200);
+}
+$("pollToggle").onchange = (e) => api("/api/poll", { enabled: e.target.checked }).catch(() => {});
+
+// ---------- recording ----------
+let selected = null;
+async function loadRecordings() {
+  const list = await api("/api/recordings");
+  $("recList").innerHTML = list.map((r) => `<div class="item${r.file === selected ? " sel" : ""}" data-f="${r.file}">
+     <span class="name">${r.file}</span><span class="muted">${r.kb} KB · ${r.mtime}</span></div>`).join("") || `<div class="muted" style="padding:8px">還沒有錄音</div>`;
+  document.querySelectorAll("#recList .item").forEach((el) => el.onclick = () => select(el.dataset.f));
+}
+async function select(file) {
+  selected = file; loadRecordings();
+  const url = "/captures/" + encodeURIComponent(file);
+  $("player").src = url;
+  try {
+    const ab = await (await fetch(url)).arrayBuffer();
+    const ctx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, 48000, 48000);
+    drawWave(await ctx.decodeAudioData(ab));
+  } catch (e) { drawWave(null); }
+}
+$("recBtn").onclick = async () => {
+  const sec = +$("recSec").value || 5, bits = +$("recBits").value;
+  $("recBtn").disabled = true; $("recMsg").className = "msg"; $("recMsg").textContent = `錄音中… ${sec} 秒，請對著麥克風講話`;
+  try {
+    const r = await api("/api/record", { sec, bits });
+    $("recMsg").textContent = `完成：${r.file} · ${r.rate} Hz / ${r.bits}-bit · RMS L ${r.rms_dbfs[0]} / R ${r.rms_dbfs[1]} dBFS · ${r.trailer}`;
+    await select(r.file);
+  } catch (e) { $("recMsg").className = "msg err"; $("recMsg").textContent = "錄音失敗：" + e.message; }
+  $("recBtn").disabled = false;
+};
+
+// ---------- beam control ----------
+const beamMsg = (t, err) => { $("beamMsg").className = "msg" + (err ? " err" : ""); $("beamMsg").textContent = t; };
+const setP = (name, values) => api("/api/set", { name, values });
+async function steer() {
+  const a = +$("az1").value; $("az1v").textContent = a + "°";
+  const r1 = a * Math.PI / 180, r2 = ((a + 180) % 360) * Math.PI / 180;
+  try { await setP("AEC_FIXEDBEAMSAZIMUTH_VALUES", [r1, r2]); beamMsg(`beam 1 = ${a}°，beam 2 = ${(a + 180) % 360}°`); } catch (e) { beamMsg(e.message, true); }
+}
+let steerTimer = null;
+$("az1").oninput = () => { $("az1v").textContent = $("az1").value + "°"; clearTimeout(steerTimer); steerTimer = setTimeout(steer, 120); };
+$("fixedOn").onchange = async (e) => {
+  try { await setP("AEC_FIXEDBEAMSONOFF", [e.target.checked ? 1 : 0]); if (e.target.checked) await steer(); beamMsg("固定 beam 模式：" + (e.target.checked ? "開" : "關")); }
+  catch (err) { beamMsg(err.message, true); }
+};
+const preset = async (l, r, fixed, label) => {
+  try {
+    await setP("AUDIO_MGR_OP_L", l); await setP("AUDIO_MGR_OP_R", r);
+    if (fixed !== undefined) { await setP("AEC_FIXEDBEAMSONOFF", [fixed]); if (fixed) await steer(); }
+    beamMsg("已切換：" + label);
+  } catch (e) { beamMsg(e.message, true); }
+};
+$("presetDefault").onclick = () => preset([8, 0], [7, 3], 0, "預設輸出，固定 beam 關");
+$("presetRaw").onclick = () => preset([1, 0], [1, 1], undefined, "原始麥克風 0 / 1");
+$("presetBeams").onclick = () => preset([6, 0], [6, 1], 1, "L = 固定 beam 1，R = 固定 beam 2");
+
+// ---------- parameters ----------
+let params = [];
+const fmt = (v) => Array.isArray(v) ? v.map((x) => typeof x === "number" && !Number.isInteger(x) ? x.toFixed(4) : x).join(", ") : String(v);
+function renderParams() {
+  const q = $("pFilter").value.trim().toUpperCase();
+  const rows = params.filter((p) => !q || p.name.includes(q) || p.desc.toUpperCase().includes(q));
+  $("pCount").textContent = `${rows.length} / ${params.length}`;
+  $("pBody").innerHTML = rows.map((p) => `<tr data-n="${p.name}">
+    <td class="mono">${p.name}</td><td>${p.type}×${p.count}</td><td>${p.access}</td>
+    <td class="mono cur">${p.access === "wo" ? "—" : `<button class="rd">讀取</button>`}</td>
+    <td>${p.access === "ro" ? "" : `<input class="wv mono" placeholder="${p.count} 個值，逗號分隔" style="width:150px"> <button class="wr">寫入</button>`}</td>
+    <td class="muted">${p.desc}</td></tr>`).join("");
+}
+$("pBody").addEventListener("click", async (e) => {
+  const tr = e.target.closest("tr"); if (!tr) return; const name = tr.dataset.n;
+  const msg = (t, err) => { $("pMsg").className = "msg" + (err ? " err" : ""); $("pMsg").textContent = t; };
+  try {
+    if (e.target.classList.contains("rd")) {
+      const r = await api("/api/get", { name }); tr.querySelector(".cur").textContent = fmt(r.value); msg(`${name} = ${fmt(r.value)}`);
+    } else if (e.target.classList.contains("wr")) {
+      const raw = tr.querySelector(".wv").value.trim(); if (!raw) return;
+      const values = raw.split(/[,\s]+/).map((s) => s.startsWith("0x") ? parseInt(s, 16) : Number(s));
+      if (values.some(Number.isNaN)) return msg("值要是數字", true);
+      if (["REBOOT", "SAVE_CONFIGURATION", "CLEAR_CONFIGURATION", "TEST_CORE_BURN", "USB_BIT_DEPTH"].includes(name) &&
+          !confirm(`${name} 會重開機或改寫 XVF flash，確定？`)) return;
+      const r = await api("/api/set", { name, values }); msg(`${name} ← ${values.join(", ")}` + (r.value ? `，讀回 ${fmt(r.value)}` : ""));
+      if (r.value) tr.querySelector(".cur").textContent = fmt(r.value);
+    }
+  } catch (err) { msg(`${name}：${err.message}`, true); }
+});
+$("pFilter").oninput = renderParams;
+
+// ---------- boot ----------
+(async () => {
+  loop();
+  try { params = await api("/api/params"); renderParams(); } catch (e) { $("pMsg").textContent = e.message; }
+  loadRecordings().catch(() => {});
+  window.addEventListener("resize", () => { drawHist(); drawCompass(last); });
+})();
+</script>
+</body>
+</html>

@@ -15,6 +15,8 @@ firmware/xiao_esp32s3/    ESP32S3 bring-up shell（PlatformIO + Arduino）
   src/i2s_link.*            I2S full-duplex（ESP32 = master）
   src/main.cpp              文字指令 shell：info / i2cscan / ver / doa / xr / xw / i2s / stat / rec / tone
 host/                     PC 端 Python 工具
+  evk_gui.py + gui/         網頁 GUI：音量、方向圖、DSP 狀態、錄音、beam 控制、參數表
+  beam_test.py              beamforming 對準/背對 A/B 測試
   env_check.py              B0：看裝置和工具在不在
   evk_cli.py                指令列工具：用名稱讀寫 XVF 參數、看 DoA、smoke test
   record_wav.py             透過 COM 錄音存成 WAV，順便報 dBFS
@@ -35,6 +37,8 @@ py -3.11 host\env_check.py                        # B0
 py -3.11 host\evk_cli.py smoke                    # B1–B3
 py -3.11 host\record_wav.py --sec 5               # B4
 ```
+
+GUI：`py -3.11 host\evk_gui.py`，然後打開 http://127.0.0.1:8765（COM8 同時只能被一個程式開，用 GUI 時先關掉其他工具）。
 
 Shell 也可以手動玩：`.\scripts\pio.ps1 device monitor -p COM8`，然後輸入 `help`。
 
