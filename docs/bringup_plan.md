@@ -11,7 +11,7 @@
 | **B0.5** 備份 | 保住出廠 ESP32 韌體 | `.\scripts\backup_xiao_flash.ps1 -Port COM8` | 得到 8 MB `.bin` 和 sha256 |
 | **B1** 燒 shell | ESP32 跑我們的韌體 | `.\scripts\pio.ps1 run -t upload --upload-port COM8`，再跑 `evk_cli.py raw info` | 回應 `OK info` |
 | **B2** I2C | ESP32 可以控制 XVF3800 | `evk_cli.py raw i2cscan`、`evk_cli.py get VERSION` | 掃到 0x2C（和 0x18），VERSION 有值 |
-| **B3** I2S 收音 | 收到 XVF 送出的處理後音訊 | `evk_cli.py raw "i2s start"`、`evk_cli.py raw "stat 1000"`、`evk_cli.py get I2S_INACTIVE` | `nonzero` 超過 50%；安靜時和拍手時的 rms 差 ≥ 20 dB；`I2S_INACTIVE = 0` |
+| **B3** I2S 收音 | 收到 XVF 送出的處理後音訊（ESP32 = slave） | `evk_cli.py raw clkprobe`、`evk_cli.py raw "i2s start"`、`evk_cli.py raw "stat 1000"` | WS ≈ 48 kHz；安靜時 RMS < −15 dBFS；講話時比安靜時高 ≥ 15 dB |
 | **B4** 錄音落地 | 錄成 WAV，可以聽 | `py -3.11 host\record_wav.py --sec 5` | 檔案能播放，`padded=0` |
 | **B5** 播放 / AEC 參考 | ESP32 → XVF → AIC3104 有聲音 | `evk_cli.py raw "tone 1000 2000 -20"`，用耳機接 AUX | 聽得到 1 kHz |
 | **B6** DSP 功能 | DoA、LED、增益 | `evk_cli.py doa --watch`、`evk_cli.py set LED_EFFECT 4` | 繞著板子講話，角度跟著變 |
@@ -21,7 +21,7 @@
 
 ## 已知風險
 
-- **I2S master/slave**：Seeed 的範例互相矛盾，B3 不過的話，先懷疑這個。
+- **I2S master/slave**：已經解決，XVF 是 master（R003）。
 - **取樣率**：XVF 映像檔是 16k 還是 48k，B2 讀 `BLD_MSG` 可以知道。ESP32 的 `i2s start <rate>` 要跟它一致。
 - **串口頻寬**：16k × 2ch × 16bit = 64 KB/s，沒問題。48k × 32bit = 384 KB/s，USB-Serial/JTAG 可能會掉資料（看 `padded`）。
 - **GPIO43** 同時是 UART0 TX，開機時 ROM 會在上面輸出 log。韌體已經關掉 core log，但 ROM 那段關不掉。

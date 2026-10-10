@@ -1,9 +1,10 @@
 """Record XVF3800 processed audio over the ESP32 serial link into a WAV file.
 
   py -3.11 host/record_wav.py --sec 5 -o captures/test.wav
-  py -3.11 host/record_wav.py --sec 5 --bits 32 --rate 48000   # needs 48k XVF image
+  py -3.11 host/record_wav.py --sec 5 --bits 32
 
-The I2S link is started at --rate first (must match the flashed XVF image).
+The ESP32 runs as I2S slave: the XVF3800 clocks set the real rate (48 kHz with
+the inthost-lr48 image, logs/R003). --rate only labels the WAV and must match it.
 """
 from __future__ import annotations
 
@@ -37,7 +38,8 @@ def main() -> int:
     ap.add_argument("--port", default=DEFAULT_PORT)
     ap.add_argument("--sec", type=float, default=5.0)
     ap.add_argument("--bits", type=int, choices=(16, 32), default=16)
-    ap.add_argument("--rate", type=int, choices=(16000, 48000), default=16000)
+    ap.add_argument("--rate", type=int, choices=(16000, 48000), default=48000)
+    ap.add_argument("--role", choices=("slave", "master"), default="slave")
     ap.add_argument("-o", "--out", type=Path)
     args = ap.parse_args()
 
@@ -45,7 +47,7 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     try:
         with EvkSerial(args.port) as link:
-            link.command(f"i2s start {args.rate}")
+            link.command(f"i2s start {args.rate} {args.role}", timeout=10)
             rec = link.record(int(args.sec * 1000), args.bits)
     except (EvkError, OSError) as e:
         print(f"error: {e}", file=sys.stderr)

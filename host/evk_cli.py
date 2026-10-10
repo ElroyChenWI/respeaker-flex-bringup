@@ -60,8 +60,25 @@ def cmd_smoke(link: EvkSerial) -> int:
 
     step("B2 i2c scan", i2cscan)
     step("B2 xvf version", lambda: link.command("ver")[0])
-    step("B3 i2s start", lambda: link.command("i2s start")[0])
-    step("B3 i2s level", lambda: link.command("stat 1000", timeout=5)[0])
+    def clkprobe():
+        link.command("i2s stop")
+        reply, _ = link.command("clkprobe")
+        ws = int(reply.split("ws_hz~")[1].split()[0])
+        if not 40000 <= ws <= 56000:
+            raise EvkError(f"XVF not driving 48 kHz WS: {reply}")
+        return reply
+
+    def level():
+        reply, _ = link.command("stat 1000", timeout=10)
+        rms = float(reply.split("L_rms_dbfs=")[1].split()[0])
+        # garbage from clock contention reads about -6 dBFS (R003); real room audio is far lower
+        if not -100 < rms < -15:
+            raise EvkError(f"L rms {rms} dBFS not audio-like: {reply}")
+        return reply
+
+    step("B3 xvf drives clocks", clkprobe)
+    step("B3 i2s start (slave)", lambda: link.command("i2s start", timeout=10)[0])
+    step("B3 i2s level", level)
     return fails
 
 

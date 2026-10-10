@@ -57,7 +57,8 @@ static void cmd_help() {
   Serial.println("#  doa                      XVF3800 DOA_VALUE");
   Serial.println("#  xr <resid> <cmd> <n>     raw control read, n payload bytes");
   Serial.println("#  xw <resid> <cmd> <b...>  raw control write, payload bytes");
-  Serial.println("#  i2s start [rate] | stop  start/stop I2S master");
+  Serial.println("#  i2s start [rate] [master|slave] | stop");
+  Serial.println("#  clkprobe                 detect external BCLK/WS (i2s must be off)");
   Serial.println("#  stat [ms]                capture and report per-channel level");
   Serial.println("#  rec <ms> [16|32]         stream raw PCM (binary block)");
   Serial.println("#  tone <hz> <ms> [dbfs]    play sine to XVF3800 I2S input");
@@ -70,7 +71,8 @@ static void cmd_info() {
                 ESP.getFlashChipSize(), ESP.getPsramSize());
   Serial.printf("# pins i2c sda=%d scl=%d | i2s bck=%d ws=%d dout=%d din=%d\n", PIN_I2C_SDA,
                 PIN_I2C_SCL, PIN_I2S_BCK, PIN_I2S_WS, PIN_I2S_DOUT, PIN_I2S_DIN);
-  Serial.printf("OK info i2s=%s rate=%u\n", i2s_link::running() ? "on" : "off", i2s_link::rate());
+  Serial.printf("OK info i2s=%s rate=%u role=%s\n", i2s_link::running() ? "on" : "off",
+                i2s_link::rate(), i2s_link::is_master() ? "master" : "slave");
 }
 
 static void cmd_i2cscan() {
@@ -162,18 +164,55 @@ static void cmd_i2s(int argc, char **argv) {
   }
   if (argc >= 2 && !strcmp(argv[1], "start")) {
     uint32_t rate = I2S_DEFAULT_RATE;
+    bool master = I2S_DEFAULT_MASTER;
     if (argc >= 3 && (!parse_u32(argv[2], &rate) || (rate != 16000 && rate != 48000))) {
       reply_err("rate must be 16000 or 48000");
       return;
     }
-    if (!i2s_link::start(rate)) {
+    if (argc >= 4) {
+      if (!strcmp(argv[3], "slave")) master = false;
+      else if (strcmp(argv[3], "master")) {
+        reply_err("role must be master or slave");
+        return;
+      }
+    }
+    if (!i2s_link::start(rate, master)) {
       reply_err("i2s start failed");
       return;
     }
-    Serial.printf("OK i2s started rate=%u\n", rate);
+    Serial.printf("OK i2s started rate=%u role=%s\n", rate, master ? "master" : "slave");
     return;
   }
-  reply_err("usage: i2s start [rate] | i2s stop");
+  reply_err("usage: i2s start [rate] [master|slave] | i2s stop");
+}
+
+// Count edges on the I2S pins with the ESP32 I2S peripheral off: if BCLK/WS
+// toggle, someone else (the XVF3800) is driving the clocks.
+static void cmd_clkprobe() {
+  if (i2s_link::running()) {
+    reply_err("stop i2s first (i2s stop)");
+    return;
+  }
+  const int pins[] = {PIN_I2S_WS, PIN_I2S_BCK, PIN_I2S_DIN};
+  uint32_t rises[3] = {0, 0, 0};
+  int last[3];
+  for (int i = 0; i < 3; ++i) {
+    pinMode(pins[i], INPUT);
+    last[i] = digitalRead(pins[i]);
+  }
+  uint32_t polls = 0;
+  const uint32_t t0 = micros();
+  while (micros() - t0 < 100000) {  // 100 ms
+    for (int i = 0; i < 3; ++i) {
+      int v = gpio_get_level((gpio_num_t)pins[i]);
+      if (v && !last[i]) ++rises[i];
+      last[i] = v;
+    }
+    ++polls;
+  }
+  // bck (~3 MHz) is faster than the poll loop, so its count is aliased: only "nonzero" matters.
+  Serial.printf("OK clkprobe polls=%u ws_hz~%u bck_rises=%u din_rises=%u\n", polls * 10,
+                rises[0] * 10, rises[1], rises[2]);
 }
 
 static void cmd_stat(int argc, char **argv) {
@@ -296,6 +335,7 @@ static void dispatch(char *line) {
   else if (!strcmp(c, "xr")) cmd_xr(argc, argv);
   else if (!strcmp(c, "xw")) cmd_xw(argc, argv);
   else if (!strcmp(c, "i2s")) cmd_i2s(argc, argv);
+  else if (!strcmp(c, "clkprobe")) cmd_clkprobe();
   else if (!strcmp(c, "stat")) cmd_stat(argc, argv);
   else if (!strcmp(c, "rec")) cmd_rec(argc, argv);
   else if (!strcmp(c, "tone")) cmd_tone(argc, argv);

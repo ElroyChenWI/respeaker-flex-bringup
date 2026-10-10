@@ -9,12 +9,13 @@ namespace i2s_link {
 static constexpr i2s_port_t kPort = I2S_NUM_0;
 static bool s_running = false;
 static uint32_t s_rate = 0;
+static bool s_master = I2S_DEFAULT_MASTER;
 
-bool start(uint32_t rate) {
+bool start(uint32_t rate, bool master) {
   if (s_running) stop();
 
   i2s_config_t cfg = {};
-  cfg.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_TX);
+  cfg.mode = (i2s_mode_t)((master ? I2S_MODE_MASTER : I2S_MODE_SLAVE) | I2S_MODE_RX | I2S_MODE_TX);
   cfg.sample_rate = rate;
   cfg.bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT;
   cfg.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT;
@@ -40,6 +41,7 @@ bool start(uint32_t rate) {
   i2s_zero_dma_buffer(kPort);
   s_running = true;
   s_rate = rate;
+  s_master = master;
   return true;
 }
 
@@ -51,6 +53,7 @@ void stop() {
 }
 
 bool running() { return s_running; }
+bool is_master() { return s_master; }
 uint32_t rate() { return s_rate; }
 
 size_t read(int32_t *buf, size_t frames, uint32_t timeout_ms) {

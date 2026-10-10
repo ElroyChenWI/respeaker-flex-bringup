@@ -35,9 +35,12 @@
 | MCLK | — | — | Seeed 範例沒有設定；⚠ 待驗證 |
 | XVF reset | ⚠ 未公開 | ESP32 → | wiki 只說「有一根 IO 可以 reset XVF」 |
 
-- I2S 角色：Flex 的 `i2s` 映像檔是 **I2S slave**（`xmos_firmwares/README.md`），所以 **ESP32 要當 master**。
-  - ⚠ Seeed 的 playback 範例寫 `is_master = false`，跟上面矛盾；full-duplex 範例則是 `true`。我們採用 master，以 B3 實測結果為準。
-- 格式：32-bit slot、立體聲、16 kHz 或 48 kHz（要跟 XVF 映像檔一致）。
+- I2S 角色：**XVF3800 是 clock master，ESP32 要當 slave**（實測，見 [R003](../logs/R003_i2s_role_xvf_is_master.md)）
+  - ESP32 的 I2S 關掉時，WS 上還是量得到 48 kHz
+  - ESP32 當 master 會搶時脈，收到 −6 dBFS 的垃圾
+  - ⚠ 這跟 Seeed `xmos_firmwares/README.md`（「i2s images are slave」）以及它的 full-duplex 範例（`is_master = true`）都相反。Seeed 的 playback 範例（`is_master = false`）才是對的
+- 這塊板子上的 XVF 映像檔：`BLD_MSG = inthost-lr48-sqr-i2c`、`VERSION = 1.0.0` → 48 kHz
+- 格式：32-bit slot、立體聲。取樣率由 XVF 決定；內部用 16 kHz 處理，所以 8 kHz 以上幾乎沒有內容
 
 ## I2C 控制協定（XVF3800 @ 0x2C）
 
