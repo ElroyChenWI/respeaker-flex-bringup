@@ -5,11 +5,13 @@
   py -3.11 host/evk_cli.py set LED_EFFECT 3
   py -3.11 host/evk_cli.py list [filter]
   py -3.11 host/evk_cli.py doa --watch
+  py -3.11 host/evk_cli.py dsp --watch    # XVF3800 DSP health while you talk
   py -3.11 host/evk_cli.py smoke          # B1..B3 gate checks in one go
 """
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 import time
 
@@ -37,6 +39,20 @@ def xvf_set(link: EvkSerial, p: xvf_table.Param, values: list):
         raise EvkError(f"{p.name} is read-only")
     data = p.encode(values)
     link.command(f"xw {p.resid} {p.cmdid} " + " ".join(str(b) for b in data))
+
+
+def dsp_line(link: EvkSerial, table: dict[str, xvf_table.Param]) -> str:
+    """One-line XVF3800 DSP health: thread headroom, AGC, speech energy, beam / DoA."""
+    g = lambda n: xvf_get(link, table[n])  # noqa: E731
+    energy = g("AEC_SPENERGY_VALUES")
+    azim = g("AEC_AZIMUTH_VALUES")  # radians: beam1, beam2, free-running, auto-select
+    doa, speech = g("DOA_VALUE")
+    return (
+        f"idle aec={g('AEC_CURRENT_IDLE_TIME')[0]:>7} pp={g('PP_CURRENT_IDLE_TIME')[0]:>7} | "
+        f"agc={g('PP_AGCGAIN')[0]:6.2f} | sp_energy_max={max(energy):10.4g} | "
+        f"scan={math.degrees(azim[2]) % 360:5.1f} auto={math.degrees(azim[3]) % 360:5.1f} deg | "
+        f"doa={doa:3d} speech={speech} | aec_conv={g('AEC_AECCONVERGED')[0]}"
+    )
 
 
 def cmd_smoke(link: EvkSerial) -> int:
@@ -98,6 +114,9 @@ def main() -> int:
     p_doa = sub.add_parser("doa", help="read direction of arrival")
     p_doa.add_argument("--watch", action="store_true")
     p_doa.add_argument("--interval", type=float, default=0.2)
+    p_dsp = sub.add_parser("dsp", help="XVF3800 DSP health line (speech energy, beams, DoA)")
+    p_dsp.add_argument("--watch", action="store_true")
+    p_dsp.add_argument("--interval", type=float, default=0.3)
     sub.add_parser("smoke", help="run B1-B3 bring-up checks")
     args = ap.parse_args()
 
@@ -126,6 +145,13 @@ def main() -> int:
             elif args.cmd == "doa":
                 while True:
                     print(link.command("doa")[0], flush=True)
+                    if not args.watch:
+                        break
+                    time.sleep(args.interval)
+            elif args.cmd == "dsp":
+                table = xvf_table.load()
+                while True:
+                    print(dsp_line(link, table), flush=True)
                     if not args.watch:
                         break
                     time.sleep(args.interval)

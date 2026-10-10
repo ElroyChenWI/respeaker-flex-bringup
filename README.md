@@ -45,5 +45,6 @@ Shell 也可以手動玩：`.\scripts\pio.ps1 device monitor -p COM8`，然後�
 | B0 環境 | ✅ PASS | [R001](logs/R001_evk_usb_baseline.md) |
 | B0.5 備份 | ✅ PASS | [R002](logs/R002_xiao_flash_backup.md) |
 | B1 shell / B2 I2C / B3 I2S | ✅ PASS（XVF 是 I2S master，ESP32 = slave，48 kHz） | [R003](logs/R003_i2s_role_xvf_is_master.md) |
-| B4 錄成 WAV | ✅ 技術面 PASS；⏳ 還要真人講話做 A/B | [R003](logs/R003_i2s_role_xvf_is_master.md) |
+| B4 錄成 WAV | ✅ PASS（使用者確認錄得到人聲） | [R003](logs/R003_i2s_role_xvf_is_master.md) |
+| XVF DSP 健康 | ✅ 有在跑（AEC 還沒驗證） | [R004](logs/R004_xvf_dsp_health.md) |
 | B5–B7 | ⏳ | |
