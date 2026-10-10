@@ -40,7 +40,7 @@ def main() -> int:
     ap.add_argument("csv", nargs="*", type=Path)
     ap.add_argument("--loudest", type=float, help="use the loudest fraction of frames instead of own_valid")
     args = ap.parse_args()
-    files = args.csv or sorted(Path(p) for p in glob.glob(str(REPO_ROOT / "captures" / "doa_*_true*.csv")))
+    files = args.csv or sorted(Path(p) for p in glob.glob(str(REPO_ROOT / "captures" / "doa_*_true[0-9]*.csv")))
     if not files:
         print("no labelled runs found (record with: doa_live.py --sec 10 --label <n>)")
         return 1
@@ -57,12 +57,12 @@ def main() -> int:
         ref = t[t.xvf_speech == 1]
         pair = sel[sel.xvf_speech == 1]
         if sel.empty or ref.empty:
-            print(f"{t.true_az.iloc[0]:>4g} {len(sel):>4}/{len(t):<4} | no usable frames ({f.name})")
+            print(f"{str(t.true_az.iloc[0]):>4} {len(sel):>4}/{len(t):<4} | no usable frames ({f.name})")
             continue
         d = wrap(pair.own_az - pair.xvf_doa) if len(pair) else np.array([np.nan])
         all_d.extend(d[~np.isnan(d)])
         own, xvf = circ_mean(sel.own_az), circ_mean(ref.xvf_doa)
-        print(f"{t.true_az.iloc[0]:>4g} {len(sel):>4}/{len(t):<4} | {own:7.1f} {circ_std(sel.own_az):5.1f} | "
+        print(f"{str(t.true_az.iloc[0]):>4} {len(sel):>4}/{len(t):<4} | {own:7.1f} {circ_std(sel.own_az):5.1f} | "
               f"{xvf:7.1f} {circ_std(ref.xvf_doa):5.1f} | {wrap(own - xvf):+7.1f} | {np.nanmedian(np.abs(d)):10.1f} "
               f"{100 * np.mean(np.abs(d) <= 10):5.0f}% {100 * np.mean(np.abs(d) <= 20):5.0f}%")
     if all_d:

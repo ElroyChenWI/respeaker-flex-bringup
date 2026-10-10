@@ -55,16 +55,18 @@ def save(path: Path, y: np.ndarray) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("wav", type=Path)
-    ap.add_argument("--noise-sec", type=float, default=5.0)
-    ap.add_argument("--skip-sec", type=float, default=0.5, help="ignore this much at each part boundary")
+    ap.add_argument("--noise-sec", type=float, default=5.0, help="noise-only lead-in length (default protocol)")
+    ap.add_argument("--noise", type=float, nargs=2, metavar=("START", "END"), help="noise-only span in seconds")
+    ap.add_argument("--speech", type=float, nargs=2, metavar=("START", "END"), help="talker (+noise) span in seconds")
     ap.add_argument("--target-az", type=float, help="talker azimuth (deg); default: estimated")
     args = ap.parse_args()
 
     x6 = read_wav(args.wav).astype(np.float64)
     mics = x6[:, RAW_MIC_CHANNELS]
-    nn = int(args.noise_sec * FS)
-    sk = int(args.skip_sec * FS)
-    noise_part, speech_part = slice(sk, nn - sk), slice(nn + sk, len(x6) - sk)
+    span = lambda a, b: slice(int(a * FS), int(min(b * FS, len(x6))))  # noqa: E731
+    noise_part = span(*args.noise) if args.noise else span(0.5, args.noise_sec - 0.5)
+    speech_part = span(*args.speech) if args.speech else span(args.noise_sec + 0.5, len(x6) / FS - 0.5)
+    print(f"noise-only {noise_part.start / FS:.1f}-{noise_part.stop / FS:.1f} s, talker {speech_part.start / FS:.1f}-{speech_part.stop / FS:.1f} s")
 
     m_noise, grid = srp_map(mics[noise_part])
     m_speech, _ = srp_map(mics[speech_part])

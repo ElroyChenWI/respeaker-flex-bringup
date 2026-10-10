@@ -50,7 +50,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--wav", type=Path, help="process a 6ch 16 kHz WAV instead of the live device")
     ap.add_argument("--sec", type=float, default=0, help="stop after N seconds (live); 0 = until Ctrl+C")
-    ap.add_argument("--label", type=float, help="true source azimuth (deg) for this run, stored in the CSV")
+    ap.add_argument("--label", help="tag for this run (position number, true azimuth or e.g. 'beam'), stored in the CSV")
     ap.add_argument("--min-conf", type=float, default=0.4, help="min SRP coherence 0..1 (quiet room p50 ~0.34, R006)")
     ap.add_argument("--margin-db", type=float, default=10.0, help="min level above the tracked noise floor")
     ap.add_argument("--no-wav", action="store_true", help="do not save the raw 6ch audio next to the CSV")
@@ -58,7 +58,7 @@ def main() -> int:
 
     doa = SrpPhat(FLEX_CIRCULAR_MICS, FS, nfft=NFFT)
     gate = Gate(args.min_conf, args.margin_db)
-    out = REPO_ROOT / "captures" / f"doa_{datetime.now():%Y%m%d_%H%M%S}{'' if args.label is None else f'_true{args.label:g}'}.csv"
+    out = REPO_ROOT / "captures" / f"doa_{datetime.now():%Y%m%d_%H%M%S}{'' if args.label is None else f'_true{args.label}'}.csv"
     out.parent.mkdir(exist_ok=True)
     rows, valid = [], []
 
