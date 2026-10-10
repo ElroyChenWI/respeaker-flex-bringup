@@ -5,7 +5,7 @@ namespace xvf {
 static TwoWire *s_wire = nullptr;
 static uint8_t s_addr = 0;
 static constexpr int kMaxAttempts = 100;
-static constexpr uint8_t kMaxPayload = 120;  // Wire buffer is 128 bytes
+static constexpr uint8_t kMaxPayload = 200;  // Wire buffer is set to 256 bytes in setup()
 
 void begin(TwoWire &wire, uint8_t addr) {
   s_wire = &wire;

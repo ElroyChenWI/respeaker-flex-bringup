@@ -11,6 +11,7 @@
 #include "board_pins.h"
 #include "i2s_link.h"
 #include "xvf3800.h"
+#include "xvf_dfu.h"
 
 #ifndef EVK_FW_VERSION
 #define EVK_FW_VERSION "dev"
@@ -18,7 +19,7 @@
 
 static constexpr size_t kChunkFrames = 512;
 static int32_t s_buf[kChunkFrames * 2];
-static char s_line[160];
+static char s_line[320];  // fits "dfu blk <seq> <256 hex chars> <sum16>"
 static size_t s_line_len = 0;
 
 // ---------- helpers ----------
@@ -62,6 +63,7 @@ static void cmd_help() {
   Serial.println("#  stat [ms]                capture and report per-channel level");
   Serial.println("#  rec <ms> [16|32]         stream raw PCM (binary block)");
   Serial.println("#  tone <hz> <ms> [dbfs]    play sine to XVF3800 I2S input");
+  Serial.println("#  dfu status|begin|blk <seq> <hex> <sum16>|end|abort|detach   XVF3800 upgrade over I2C");
   Serial.println("OK help");
 }
 
@@ -322,6 +324,82 @@ static void cmd_tone(int argc, char **argv) {
   Serial.printf("OK tone hz=%u ms=%u dbfs=%.1f\n", hz, ms, dbfs);
 }
 
+static int hex_nibble(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
+}
+
+// Next block sequence number the XVF3800 has NOT yet received. Makes `dfu blk`
+// idempotent, so the host can safely resend after a lost line (R005).
+static uint32_t s_dfu_next = 0;
+
+static void reply_dfu(const char *what, int rc, const xvf_dfu::Status &st) {
+  Serial.printf("%s dfu %s rc=%s status=%u state=%u poll=%u next=%u\n", rc == xvf::OK ? "OK" : "ERR",
+                what, xvf::strerror(rc), st.status, st.state, st.poll_ms, s_dfu_next);
+}
+
+// XVF3800 firmware upgrade over I2C. Host tool: host/xvf_i2c_dfu.py
+//   dfu blk <seq> <hex up to 256 chars> <sum16 hex>
+static void cmd_dfu(int argc, char **argv) {
+  xvf_dfu::Status st = {0xFF, 0, 0xFF};
+  const char *sub = argc >= 2 ? argv[1] : "";
+  if (!strcmp(sub, "status")) {
+    reply_dfu("status", xvf_dfu::get_status(&st), st);
+  } else if (!strcmp(sub, "begin")) {
+    s_dfu_next = 0;
+    reply_dfu("begin", xvf_dfu::begin(&st), st);
+  } else if (!strcmp(sub, "blk") && argc == 5) {
+    uint32_t seq, sum;
+    size_t n = strlen(argv[3]);
+    if (!parse_u32(argv[2], &seq) || n == 0 || n % 2 || n / 2 > xvf_dfu::kBlockSize) {
+      reply_err("dfu blk <seq> <2..256 hex chars> <sum16>");
+      return;
+    }
+    char *end = nullptr;
+    sum = strtoul(argv[4], &end, 16);
+    if (*end) {
+      reply_err("dfu blk: bad checksum field");
+      return;
+    }
+    if (seq + 1 == s_dfu_next) {  // resend of the block we already wrote
+      Serial.printf("OK dfu blk dup seq=%u next=%u\n", seq, s_dfu_next);
+      return;
+    }
+    if (seq != s_dfu_next) {
+      Serial.printf("ERR dfu blk seq=%u expected=%u\n", seq, s_dfu_next);
+      return;
+    }
+    uint8_t data[xvf_dfu::kBlockSize];
+    uint32_t calc = 0;
+    for (size_t i = 0; i < n / 2; ++i) {
+      int hi = hex_nibble(argv[3][2 * i]), lo = hex_nibble(argv[3][2 * i + 1]);
+      if (hi < 0 || lo < 0) {
+        reply_err("dfu blk: bad hex");
+        return;
+      }
+      data[i] = (hi << 4) | lo;
+      calc += data[i];
+    }
+    if ((calc & 0xFFFF) != sum) {
+      Serial.printf("ERR dfu blk checksum got=%04X calc=%04X\n", sum, calc & 0xFFFF);
+      return;
+    }
+    int rc = xvf_dfu::block(data, n / 2, &st);
+    if (rc == xvf::OK) ++s_dfu_next;
+    reply_dfu("blk", rc, st);
+  } else if (!strcmp(sub, "end")) {
+    reply_dfu("end", xvf_dfu::block(nullptr, 0, &st), st);
+  } else if (!strcmp(sub, "abort")) {
+    reply_dfu("abort", xvf_dfu::abort_transfer(), st);
+  } else if (!strcmp(sub, "detach")) {
+    reply_dfu("detach", xvf_dfu::detach(), st);
+  } else {
+    reply_err("usage: dfu status|begin|blk <seq> <hex> <sum16>|end|abort|detach");
+  }
+}
+
 static void dispatch(char *line) {
   char *argv[128];
   int argc = split(line, argv, 128);
@@ -336,6 +414,7 @@ static void dispatch(char *line) {
   else if (!strcmp(c, "xw")) cmd_xw(argc, argv);
   else if (!strcmp(c, "i2s")) cmd_i2s(argc, argv);
   else if (!strcmp(c, "clkprobe")) cmd_clkprobe();
+  else if (!strcmp(c, "dfu")) cmd_dfu(argc, argv);
   else if (!strcmp(c, "stat")) cmd_stat(argc, argv);
   else if (!strcmp(c, "rec")) cmd_rec(argc, argv);
   else if (!strcmp(c, "tone")) cmd_tone(argc, argv);
@@ -346,7 +425,9 @@ static void dispatch(char *line) {
 
 void setup() {
   Serial.setTxBufferSize(16384);
+  Serial.setRxBufferSize(4096);  // a DFU line is ~270 bytes; the 256-byte default dropped data (R005)
   Serial.begin(115200);
+  Wire.setBufferSize(256);  // DFU blocks are 3 + 130 bytes; must precede begin()
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, I2C_FREQ_HZ);
   xvf::begin(Wire, XVF3800_I2C_ADDR);
   // I2S stays off until asked: bring-up stages are gated one at a time.

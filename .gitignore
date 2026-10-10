@@ -16,3 +16,6 @@ third_party/*
 captures/*
 !captures/README.md
 !captures/R001_com8_factory_10s.bin
+
+# downloaded host tools (dfu-util etc.)
+tools/
