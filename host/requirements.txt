@@ -1,0 +1,5 @@
+pyserial>=3.5
+numpy>=1.24
+# only for XVF3800 USB firmware (third_party/reSpeaker_Flex/python_control/xvf_host.py)
+pyusb>=1.2
+libusb-package>=1.0.26

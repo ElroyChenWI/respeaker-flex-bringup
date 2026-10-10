@@ -1,0 +1,18 @@
+# PlatformIO
+firmware/**/.pio/
+firmware/**/.vscode/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# vendored upstream (scripts/fetch_vendor.ps1)
+third_party/*
+!third_party/README.md
+
+# captures: keep R0XX evidence, drop bulk recordings and flash dumps
+captures/*
+!captures/R*
+!captures/README.md
+captures/xiao_flash_backup_*.bin
