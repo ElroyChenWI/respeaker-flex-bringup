@@ -73,6 +73,31 @@ def apply_weights(X: np.ndarray, w: np.ndarray) -> np.ndarray:
     return np.einsum("fm,tfm->tf", np.conj(w), X)
 
 
+def output_noise_psd(Rn: np.ndarray, w: np.ndarray) -> np.ndarray:
+    """Noise PSD after the beamformer, per bin: w^H Rn w  (bins,)."""
+    return np.real(np.einsum("fm,fmn,fn->f", np.conj(w), Rn, w))
+
+
+def wiener_postfilter(Y: np.ndarray, noise_psd: np.ndarray, alpha: float = 0.98,
+                      floor_db: float = -15.0) -> np.ndarray:
+    """Single-channel Wiener post-filter with decision-directed a-priori SNR.
+
+    MVDR followed by this filter is the multichannel Wiener filter (MWF) decomposition.
+    Y (frames, bins) beamformer output, noise_psd (bins,) its noise PSD. The gain floor
+    limits musical noise at the cost of less suppression."""
+    floor = 10 ** (floor_db / 20)
+    lam = np.maximum(noise_psd, 1e-20)
+    out = np.empty_like(Y)
+    prev_s2 = np.zeros(Y.shape[1])
+    for t in range(len(Y)):
+        gamma = np.abs(Y[t]) ** 2 / lam                                       # a-posteriori SNR
+        xi = alpha * prev_s2 / lam + (1 - alpha) * np.maximum(gamma - 1, 0)   # a-priori SNR
+        g = np.maximum(xi / (1 + xi), floor)
+        out[t] = g * Y[t]
+        prev_s2 = np.abs(out[t]) ** 2
+    return out
+
+
 def beam_pattern(w: np.ndarray, mics: np.ndarray, fs: int, az_grid: np.ndarray) -> np.ndarray:
     """|response| (az, bins) of weights w (bins, M) to plane waves from each azimuth."""
     freqs = np.fft.rfftfreq(NFFT, 1 / fs)

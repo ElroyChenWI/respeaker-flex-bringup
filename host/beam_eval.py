@@ -75,23 +75,38 @@ def main() -> int:
     print(f"interferer ~{interf_az:.0f} deg (noise-only part), talker ~{target_az:.0f} deg"
           f"{' (given)' if args.target_az is not None else ' (speech map - noise map)'}")
 
+    # Train/test split of the noise-only span (R008): the first half estimates the noise
+    # statistics (MVDR covariance, Wiener noise PSD), the second half measures the residual
+    # noise. Scoring on the training data would flatter the adaptive methods.
+    mid = (noise_part.start + noise_part.stop) // 2
+    noise_train, noise_test = slice(noise_part.start, mid), slice(mid, noise_part.stop)
+    print(f"noise statistics from {noise_train.start / FS:.1f}-{noise_train.stop / FS:.1f} s, "
+          f"residual noise scored on {noise_test.start / FS:.1f}-{noise_test.stop / FS:.1f} s")
+
     X = bf.stft(mics)
     d = bf.steering(FLEX_CIRCULAR_MICS, target_az, FS)
-    frames_noise = slice(noise_part.start // bf.HOP, (noise_part.stop - bf.NFFT) // bf.HOP)
-    w_mvdr = bf.mvdr_weights(bf.noise_covariance(X[frames_noise]), d)
+    frames_train = slice(noise_train.start // bf.HOP, (noise_train.stop - bf.NFFT) // bf.HOP)
+    Rn = bf.noise_covariance(X[frames_train])
+    w_mvdr = bf.mvdr_weights(Rn, d)
+    w_mic0 = np.zeros_like(d)
+    w_mic0[:, 0] = 1.0
+    Y_mvdr = bf.apply_weights(X, w_mvdr)
+    Y_mic0 = X[:, :, 0]
     outputs = {  # name: (file tag, signal)
         "mic0 (raw)": ("mic0", mics[:, 0]),
+        "mic0 + Wiener": ("mic0_wiener", bf.istft(bf.wiener_postfilter(Y_mic0, bf.output_noise_psd(Rn, w_mic0)), len(mics))),
         "delay-and-sum": ("das", bf.istft(bf.delay_and_sum(X, d), len(mics))),
-        "MVDR": ("mvdr", bf.istft(bf.apply_weights(X, w_mvdr), len(mics))),
+        "MVDR": ("mvdr", bf.istft(Y_mvdr, len(mics))),
+        "MVDR + Wiener (MWF)": ("mwf", bf.istft(bf.wiener_postfilter(Y_mvdr, bf.output_noise_psd(Rn, w_mvdr)), len(mics))),
         "XVF ch1 (processed L)": ("xvf_ch1", x6[:, 0]),
         "XVF ch2 (ASR beam)": ("xvf_ch2", x6[:, 1]),
     }
 
-    base = est_snr_db(outputs["mic0 (raw)"][1], noise_part, speech_part)
+    base = est_snr_db(outputs["mic0 (raw)"][1], noise_test, speech_part)
     stem = args.wav.with_suffix("")
     print(f"{'output':<24} {'est. SNR':>9} {'vs mic0':>8}   file")
     for name, (tag, y) in outputs.items():
-        snr = est_snr_db(y, noise_part, speech_part)
+        snr = est_snr_db(y, noise_test, speech_part)
         out = Path(f"{stem}_{tag}.wav")
         save(out, y)
         print(f"{name:<24} {snr:8.1f} dB {snr - base:+7.1f} dB   {out.name}")

@@ -74,6 +74,32 @@ def test_beamformers(target_az: float = 90.0, interf_az: float = 0.0) -> tuple[f
     return g_das, g_mvdr
 
 
+def test_wiener_postfilter() -> float:
+    """Target in strong uncorrelated (sensor-like) noise: the post-filter must raise SNR
+    while keeping most target energy. Noise PSD is learnt on a separate noise-only clip."""
+    from . import beamformer as bf
+
+    rng = np.random.default_rng(5)
+    n = 4 * FS
+    tgt = plane_wave(90, n, 60, rng)
+    tgt *= (np.sin(np.arange(n) / FS * 2 * np.pi * 1.5) > 0)[:, None]  # on/off like speech
+    noise = lambda: rng.standard_normal(tgt.shape) * 0.5  # noqa: E731
+    d = bf.steering(FLEX_CIRCULAR_MICS, 90, FS)
+    w = d / d.shape[1]
+    lam = bf.output_noise_psd(bf.noise_covariance(bf.stft(noise())), w)  # train clip
+    test_noise = noise()
+    Yt = bf.apply_weights(bf.stft(tgt), w)
+    Yn = bf.apply_weights(bf.stft(test_noise), w)
+    # same gains applied to both parts: derive gains on the mixture, then split
+    Ym = Yt + Yn
+    G = np.abs(bf.wiener_postfilter(Ym, lam)) / (np.abs(Ym) + 1e-20)
+    snr_in = 10 * np.log10(np.sum(np.abs(Yt) ** 2) / np.sum(np.abs(Yn) ** 2))
+    snr_out = 10 * np.log10(np.sum(np.abs(G * Yt) ** 2) / np.sum(np.abs(G * Yn) ** 2))
+    kept = 10 * np.log10(np.sum(np.abs(G * Yt) ** 2) / np.sum(np.abs(Yt) ** 2))
+    print(f"Wiener post-filter: SNR {snr_in:+.1f} -> {snr_out:+.1f} dB (+{snr_out - snr_in:.1f}), target energy kept {kept:+.1f} dB")
+    return snr_out - snr_in
+
+
 def test_stft_roundtrip() -> None:
     from . import beamformer as bf
 
@@ -95,4 +121,5 @@ if __name__ == "__main__":
     assert g_mvdr > g_das and g_mvdr > 10
     test_beamformers(90, 180)
     test_beamformers(90, 45)
+    assert test_wiener_postfilter() > 3
     print("OK")
