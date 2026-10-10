@@ -145,6 +145,15 @@ XVF 的 DSP 是封閉的，所以只從**介面上的量測**推測它的行為�
 - **已知的限制**：MVDR 用的是自由場轉向向量，跟有回音的房間不完全吻合，會犧牲一些講話品質（SDR 7.9 dB）。下一步會改用 relative transfer function（RTF）
 - XVF3800 是黑盒子，**沒辦法 shadow filtering**，所以不在這張表裡；用喇叭跟 XVF 做 A/B 在 roadmap 上
 
+**空間濾波這一級的初步觀察**：同一段實際錄音（[R007](logs/R007_beamformer_vs_xvf.md)）中，自己的 MVDR 比單支麥克風提升 **+5.4 dB**，XVF3800 的 beam 輸出（ASR beam）只提升 **+1.3 dB**。
+
+這只是初步觀察，還不是定論：
+- 只有一次錄音，用的是能量 SNR 指標
+- 自己的 MVDR 事先從一段「只有噪音」的錄音學過噪音，XVF 沒有這個優勢
+- XVF 的 beam 輸出本身可能還包含其他處理
+
+XVF 的完整處理還多了後處理（同一個指標下 +14.8 dB）。我們對應的那一級是 MWF，目前只做到離線版本。
+
 ```powershell
 cd host; python -m algo.test_algo; cd ..                   # 合成測試
 python host\doa_live.py --sec 10 --label 1                 # 自己 vs XVF 的 DoA，存 6ch WAV + CSV

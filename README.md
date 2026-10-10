@@ -141,6 +141,8 @@ Talker and interferer (music) were recorded **separately** at fixed positions an
 - **Known limitation:** MVDR uses free-field steering, which does not match the reverberant room exactly and costs some speech fidelity (SDR 7.9 dB). Relative-transfer-function steering is the next step.
 - The XVF3800 cannot be shadow-filtered (closed DSP), so it is not in this table; a loudspeaker A/B against it is on the roadmap.
 
+**Early signal at the spatial-filtering stage.** On the same live recording ([R007](logs/R007_beamformer_vs_xvf.md)), own MVDR improved SNR over a single mic by **+5.4 dB**, the XVF3800's beam output (ASR beam tap) by **+1.3 dB**. This is preliminary, not a verdict: one recording, an energy-based metric, own MVDR learnt the noise from a noise-only lead-in the chip never gets, and the chip's beam tap may itself include further processing. The XVF3800's full chain adds post-processing on top (+14.8 dB on the same metric); the matching own stage, the MWF, so far runs offline only.
+
 ```powershell
 python -m algo.test_algo                                   # synthetic checks (run in host/)
 python host\doa_live.py --sec 10 --label 1                 # own vs XVF DoA, saves 6ch WAV + CSV
