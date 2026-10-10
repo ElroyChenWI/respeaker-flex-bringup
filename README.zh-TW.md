@@ -19,6 +19,7 @@
 - [系統架構](#系統架構)
 - [目前能做什麼](#目前能做什麼)
 - [需要準備的東西](#需要準備的東西)
+- [自己的陣列演算法 vs XVF3800](#自己的陣列演算法-vs-xvf3800)
 - [快速開始（第一次使用）](#快速開始第一次使用)
 - [GUI 使用說明](#gui-使用說明)
 - [命令列工具](#命令列工具)
@@ -36,7 +37,7 @@
                           reSpeaker Flex 核心板
  ┌──────────────┐   PDM   ┌──────────────────────┐   I2S (XVF = master, 48 kHz)   ┌───────────────┐   USB-C    ┌──────────┐
  │ 4-mic array  │ ──────▶ │ XMOS XVF3800         │ ─────────────────────────────▶ │ XIAO ESP32S3  │ ─────────▶ │    PC    │
- │ (FPC 24-pin) │         │ AEC / Beamforming /  │ ◀── I2S (播放 / AEC 參考) ──── │ (I2S slave)   │  序列埠    │ Python + │
+ │ (FPC 24-pin) │         │ AEC / Beamforming /  │ ◀── I2S (播放) ────────────── │ (I2S slave)   │  序列埠    │ Python + │
  └──────────────┘         │ NS / AGC / VAD / DoA │ ◀── I2C 0x2C (參數控制) ────── │ 本專案韌體     │            │ 網頁 GUI │
                           └──────────┬───────────┘                                 └───────────────┘            └──────────┘
                                      │ I2C 0x18
@@ -53,14 +54,18 @@
 
 | 功能 | 狀態 |
 |---|---|
-| PC 錄到 XVF 處理後的聲音（48 kHz、立體聲、16/32-bit WAV） | ✅ Verified：串流不掉資料（`padded=0`），確認錄得到人聲 |
-| 讀寫 XVF3800 全部 121 個參數（I2C） | ✅ Verified |
-| 即時 DSP 監看：AGC、beam 方向、VAD、DoA、運算餘裕 | ✅ Verified：數值會隨環境和人聲變化 |
-| Beamforming：自動選擇、自由掃描、固定 beam 指向 | ✅ Implemented：可以即時操控；指向性的 dB 數據待量（`beam_test.py`） |
-| AEC 回音消除、降噪、AGC、去混響 | ✅ Implemented：在 XVF3800 上運作，可以透過工具調參；回音消除量待量 |
-| 播放路徑（ESP32 → XVF → AIC3104 → AUX）/ AEC 參考訊號 | ✅ Implemented（`tone` 指令）；待接喇叭驗證 |
+| PC 錄到 XVF 處理後的聲音（48 kHz、立體聲、16/32-bit WAV；I2S 韌體，經 ESP32） | ✅ Verified：串流不掉資料（`padded=0`） |
+| 4 支麥克風原始訊號 + 2 聲道處理後輸出（16 kHz；USB 6ch 韌體，直接進 PC） | ✅ Verified |
+| 讀寫 XVF3800 全部 121 個參數（I2C 經 ESP32，或 USB） | ✅ Verified |
+| 用 I2C 更新 XVF3800 韌體（不需要 SafeMode 鈕、不需要 USB） | ✅ Verified |
+| 即時 DSP 監看：VAD、DoA、beam 方向、運算餘裕 | ✅ Verified |
+| XVF beam 控制：自動選擇、自由掃描、固定 beam、輸出路由 | ✅ Verified：GUI 可以即時操控 |
+| 自己寫的 SRP-PHAT DoA | ✅ Verified：跟 XVF 中位數差 2° |
+| 自己寫的 beamformer：delay-and-sum、MVDR、MVDR + Wiener（MWF） | ✅ Verified：MWF SNR +11.4 dB、STOI 0.72 → 0.80（離線） |
 | 網頁 GUI | ✅ Verified |
-| 脫離 PC（Wi-Fi 串流） | 🗺️ Roadmap |
+| 即時運算、RTF 轉向向量、用喇叭跟 XVF 做 A/B | 🗺️ Roadmap |
+
+> **Verified** = 在實機上量過，數據和方法都記在 `logs/`。
 
 ---
 
@@ -88,6 +93,81 @@
 | PlatformIO | Core 6.x | 裝 VS Code 的 PlatformIO 擴充套件，或執行 `pip install platformio` |
 
 > PlatformIO 第一次編譯時會自動下載 ESP32 工具鏈和 esptool，大約幾百 MB。
+
+---
+
+## 自己的陣列演算法 vs XVF3800
+
+把 XVF3800 換成 USB 6ch 韌體後，第 3–6 聲道就是 4 支麥克風的原始訊號（沒有增益、沒有延遲）。以下所有演算法都在 [`host/algo`](host/algo) 用 NumPy 從頭寫，並跟 XMOS 晶片處理同一段錄音的結果比較。
+
+### 1. XVF3800 黑箱特性分析
+
+XVF 的 DSP 是封閉的，所以只從**介面上的量測**推測它的行為，沒有動到韌體：
+
+| 量測 | 發現 |
+|---|---|
+| 關掉 ESP32 的 I2S，計算時脈邊緣 | XVF3800 是 **I2S clock master**，48 kHz（Seeed 文件寫 slave） |
+| `DOA_VALUE`、自動選擇 beam 方位、`AEC_MIC_ARRAY_GEO` 三者比對 | 用同一套座標：邊長 44.4 mm 的正方形，0° = +x，逆時針為正 |
+| 從 DSP 管線不同位置取訊號（原始麥克風 → beam → 後處理） | 只有 beam：比單麥 **+1.3 dB**；完整處理：**+14.8 dB** → 大部分效果來自 beam **之後**的後處理 |
+| 自己的 SRP-PHAT vs `DOA_VALUE` | 中位數差 **2°** → XVF 的定位行為跟 PHAT 類的方法一致 |
+
+根據這些量測推測的架構是：**beamformer → 頻譜後處理 → 增益控制**，也就是經典的語音前端結構。自己的實作照同樣的結構，好讓每一級都能單獨量測。
+
+### 2. 聲源定位：SRP-PHAT
+
+6 組麥克風配對、PHAT 加權、1° 網格、300–3800 Hz（這個陣列 3.86 kHz 以上會有空間混疊）。
+
+| | 結果 |
+|---|---|
+| 合成平面波，24 個方向 | SNR 20 dB 時最大誤差 1°，0 dB 時 4° |
+| 真人講話，板子周圍 4 個位置 | 跟 XVF **中位數差 2°**，84% 的幀在 10° 以內 |
+
+合成測試在接硬體之前就抓到一個符號錯誤（每個方向都剛好錯 180°），見 [R006](logs/R006_srp_phat_doa_vs_xvf.md)。
+
+### 3. Beamforming：4 種方法，一套公平的評估
+
+講話和干擾（音樂）在固定位置**分開錄**，再在數位端相加（聲音在空氣中是線性疊加）。每種方法只在混合訊號上決定權重和增益，再把**同一組**權重和增益分別套到講話和噪音上（shadow filtering），得到真正的輸出 SNR、講話失真和清晰度。估計噪音統計的時段和評分的時段是分開的。
+
+| 方法 | SNR 提升 | 講話 SDR | STOI |
+|---|---:|---:|---:|
+| 單支麥克風 | 0 dB | — | 0.723 |
+| 單支麥克風 + Wiener | +7.5 dB | 11.2 dB | 0.741 |
+| Delay-and-sum | +0.3 dB | — | 0.740 |
+| MVDR | +4.0 dB | 7.9 dB | 0.785 |
+| **MVDR + Wiener（MWF）** | **+11.4 dB** | 7.1 dB | **0.797** |
+
+*輸入 SNR +6.7 dB。輸入 SNR 0 dB 時，MWF 提升 +13.7 dB，STOI 從 0.56 提升到 0.69。* 完整方法和限制見 [R009](logs/R009_fair_eval_shadow_filtering.md)。
+
+**數據說明了什麼：**
+- **4 種方法裡 MWF 最好**，SNR 和清晰度都是最高
+- **清晰度主要來自空間濾波**：只用 Wiener 時 SNR +7.5 dB，STOI 幾乎沒變；MVDR 只有 +4 dB，STOI 卻提升最多
+- **能量 SNR 可以被操控**：改用這套評估之前，舊的 SNR 指標幾乎 1:1 跟著 Wiener 的增益下限跑（改一個參數就能從 +11 變成 +29 dB），所以換掉了，見 [R008](logs/R008_mwf_postfilter_and_metric_limits.md)
+- **已知的限制**：MVDR 用的是自由場轉向向量，跟有回音的房間不完全吻合，會犧牲一些講話品質（SDR 7.9 dB）。下一步會改用 relative transfer function（RTF）
+- XVF3800 是黑盒子，**沒辦法 shadow filtering**，所以不在這張表裡；用喇叭跟 XVF 做 A/B 在 roadmap 上
+
+```powershell
+cd host; python -m algo.test_algo; cd ..                   # 合成測試
+python host\doa_live.py --sec 10 --label 1                 # 自己 vs XVF 的 DoA，存 6ch WAV + CSV
+python host\doa_eval.py                                    # 整理有標籤的 DoA 錄音
+python host\mix_eval.py <speech.wav> <noise.wav> [--snr 0] # 公平的 beamformer 比較
+```
+
+### XVF3800 的兩種韌體
+
+XVF3800 可以跑兩種映像檔，透過 ESP32 用 I2C 切換（不需要 SafeMode 鈕，也不需要接 XVF 的 USB）：
+
+| 映像檔 | 音訊路徑 | 用途 |
+|---|---|---|
+| I2S 48 kHz（`i2s/respeaker_flex_i2s_c48k2ch_*.bin`） | 處理後的立體聲 → ESP32 → PC | GUI 錄音、ESP32 整合 |
+| USB 6ch 16 kHz（`usb/v1.0.4/respeaker_flex_usb_c16k6ch_v1.0.4.bin`） | 2 聲道處理後 + 4 支原始麥克風 → 直接進 PC（核心板的 USB-C） | 自己的演算法（`host/algo`） |
+
+```powershell
+python host\xvf_i2c_dfu.py --status
+python host\xvf_i2c_dfu.py third_party\reSpeaker_Flex\xmos_firmwares\usb\v1.0.4\respeaker_flex_usb_c16k6ch_v1.0.4.bin
+python host\xvf_i2c_dfu.py third_party\reSpeaker_Flex\xmos_firmwares\i2s\v1.0.4\respeaker_flex_i2s_c48k2ch_v1.0.4.bin
+```
+
+只會寫入升級區；出廠映像檔不能被覆寫，升級映像檔無效時 bootloader 會退回出廠映像檔。
 
 ---
 
@@ -185,7 +265,7 @@ python host\record_wav.py --sec 5
 |---|---|
 | **音量** | L/R 即時音量（dBFS），細線是峰值；下面是最近 20 秒的走勢 |
 | **方向** | 4 支麥克風的位置，以及幾條方向線：<br>藍 = 自動選擇的 beam<br>灰虛線 = 自由掃描的 beam<br>紫 = 固定 beam<br>綠 = 有人說話時的 DoA（標題旁的小燈也會亮）<br>座標：0° 朝右（+x），逆時針為正 |
-| **DSP 狀態** | AGC 增益、AEC 有沒有收斂、AEC 和 PP thread 的運算餘裕（越大越好，0 代表過載）、各 beam 的語音能量 |
+| **DSP 狀態** | DSP thread 的運算餘裕（越大越好，0 代表過載）、增益和收斂旗標、各 beam 的語音能量 |
 | **錄音** | 設定秒數和位元數，按「● 錄音」。錄完自動播放並畫出波形；下面列出最近的錄音 |
 | **Beamforming 控制** | 三個輸出路由的快速切換：預設、原始麥克風、固定 beam 送到 L/R。拖拉桿可以把 beam 1 轉到任意角度，beam 2 會自動放在反方向 |
 | **XVF3800 參數** | 121 個參數，可以搜尋、讀取、寫入。會重開機或改寫 flash 的參數，寫入前會先確認 |
@@ -210,9 +290,9 @@ python host\record_wav.py --sec 5
 ```powershell
 python host\evk_cli.py smoke                    # B1–B3 自我檢查
 python host\evk_cli.py raw "info"               # 直接送一行 shell 指令
-python host\evk_cli.py list AGC                 # 列出名稱含 AGC 的 XVF 參數
+python host\evk_cli.py list DOA                 # 列出名稱含 DOA 的 XVF 參數
 python host\evk_cli.py get VERSION              # 用名稱讀參數
-python host\evk_cli.py get AEC_AZIMUTH_VALUES
+python host\evk_cli.py get DOA_VALUE
 python host\evk_cli.py set LED_EFFECT 3         # 用名稱寫參數（暫時，不存檔）
 python host\evk_cli.py doa --watch              # 持續顯示聲源方向
 python host\evk_cli.py dsp --watch              # 持續顯示 DSP 健康狀態
@@ -316,6 +396,9 @@ REC rate=48000 ch=2 bits=16 bytes=<N>\n
 │       └── i2s_link.{h,cpp}   I2S full-duplex（master/slave 可選）
 ├── host/                      PC 端 Python
 │   ├── evk_gui.py + gui/      網頁 GUI（只用 Python 內建套件）
+│   ├── algo/                  自己的陣列演算法：幾何、SRP-PHAT、DAS / MVDR / Wiener、合成測試
+│   ├── doa_live.py / doa_eval.py / mix_eval.py   演算法的錄音與評估
+│   ├── xvf_i2c_dfu.py         用 I2C 更新 XVF 韌體
 │   ├── evk_cli.py             指令列工具
 │   ├── record_wav.py          錄音
 │   ├── beam_test.py           beamforming A/B
@@ -358,10 +441,13 @@ REC rate=48000 ch=2 bits=16 bytes=<N>\n
 | B0.5 備份 flash | ✅ | [R002](logs/R002_xiao_flash_backup.md) |
 | B1 shell / B2 I2C / B3 I2S | ✅ XVF = I2S master，ESP32 = slave，48 kHz | [R003](logs/R003_i2s_role_xvf_is_master.md) |
 | B4 錄成 WAV | ✅ 確認錄得到人聲 | [R003](logs/R003_i2s_role_xvf_is_master.md) |
-| XVF DSP 健康 | ✅ 有在跑（AEC 還沒驗證） | [R004](logs/R004_xvf_dsp_health.md) |
-| B5 播放 + AEC | ⏳ 要接耳機或喇叭到 AUX | |
-| B6 DoA 準確度 / beam 指向性數據 | ⏳ `beam_test.py` 寫好了 | |
-| B7 USB 模式（XVF 直接當 PC 麥克風，6ch 原始麥克風） | ⏳ 選配，會刷 XVF 韌體 | |
+| XVF DSP 健康 | ✅ 沒有 bypass、運算有餘裕、beam / VAD / DoA 都有反應 | [R004](logs/R004_xvf_dsp_health.md) |
+| B7 用自己的 I2C DFU 刷 USB 6ch 韌體 | ✅ 拿到 4 支麥克風原始訊號；修好序列埠接收緩衝區後，0 次重送 | [R005](logs/R005_xvf_usb6ch_via_i2c_dfu.md) |
+| A1 自己的 SRP-PHAT DoA vs XVF | ✅ 中位數差 2° | [R006](logs/R006_srp_phat_doa_vs_xvf.md) |
+| A2 真實房間的 beamformer | ✅ MVDR +4.9 dB；XVF 只有 beam +1.3 dB，完整處理 +14.8 dB | [R007](logs/R007_beamformer_vs_xvf.md) |
+| A3 Wiener 後處理 + 檢查指標 | ✅ 證明簡單的 SNR 指標可以被操控 | [R008](logs/R008_mwf_postfilter_and_metric_limits.md) |
+| A4 公平評估（shadow filtering） | ✅ MWF 最佳：+11.4 dB、STOI 0.72 → 0.80 | [R009](logs/R009_fair_eval_shadow_filtering.md) |
+| 下一步 | ⏭️ 即時運算 + 線上估計噪音、RTF 轉向向量、用喇叭跟 XVF 做 A/B | |
 
 ---
 

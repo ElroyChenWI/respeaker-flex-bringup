@@ -28,32 +28,39 @@ This repository is the complete bring-up of that kit:
 - **ESP32-S3 firmware** — a line-based control shell that drives the XVF3800 over I2C, captures its processed audio over I2S, and streams PCM to the PC loss-free.
 - **Host toolkit (Python)** — name-based access to all **121 XVF3800 control parameters**, WAV recording, a scripted smoke test, DSP health monitoring and a beamforming A/B test.
 - **Live web console** — levels, beam/DoA compass, DSP telemetry, one-click recording with playback, interactive beam steering and a searchable parameter editor. Zero third-party dependencies.
-- **An engineering log** — every bring-up stage is a tracked experiment (`logs/R0XX`) with hypothesis, action, observation and conclusion.
+- **XVF3800 firmware update over I2C** — an own implementation of the XMOS DFU protocol on the ESP32, so the XVF3800 can be switched between its I2S and USB 6-channel images with no SafeMode button and no USB connection to the chip.
+- **Own array processing** — SRP-PHAT localisation, delay-and-sum, MVDR and MVDR + Wiener (MWF) beamforming written from scratch on the four raw microphones, benchmarked against the XVF3800 with a leakage-free, shadow-filtering evaluation.
+- **An engineering log** — every stage is a tracked experiment (`logs/R0XX`) with hypothesis, action, observation and conclusion.
 
 ## Highlights
 
 | | |
 |---|---|
 | 🔍 **Root-caused a silent failure the vendor docs cause** | Following Seeed's documentation (ESP32 as I2S master) yields full-scale garbage. A purpose-built `clkprobe` command proved the XVF3800 image drives BCLK/WS itself at 48 kHz; switching the ESP32 to slave turned −6 dBFS noise into clean −48 dBFS room audio. [→ R003](logs/R003_i2s_role_xvf_is_master.md) |
+| 🧠 **Own algorithms, benchmarked against XMOS** | SRP-PHAT DoA agrees with the XVF3800's own estimate to a **2° median** (84 % of frames within 10°). The best own beamformer, **MVDR + Wiener (MWF)**, raises SNR by **+11.4 dB** and STOI intelligibility from **0.72 to 0.80** under a fair shadow-filtering evaluation. [→ R006](logs/R006_srp_phat_doa_vs_xvf.md) · [R009](logs/R009_fair_eval_shadow_filtering.md) |
+| 🔬 **Black-box characterisation of the XVF3800** | Probed the closed DSP through its interfaces: clock role, coordinate frame, and signal taps along the pipeline. Beam-only output gains +1.3 dB, the fully processed output +14.8 dB → most of the chip's benefit comes from post-processing after the beamformer — the same structure as our MWF. [→ R007](logs/R007_beamformer_vs_xvf.md) |
+| 🔁 **Firmware swap with no button and no USB** | The board has no SafeMode button and the I2S image exposes no USB, so the XMOS I2C DFU protocol was implemented on the ESP32. A sporadic stall was traced to a 256-byte serial RX buffer and fixed; idempotent sequence numbers + checksums make every block safely resendable. 7296 blocks, 142 s, 0 retries. [→ R005](logs/R005_xvf_usb6ch_via_i2c_dfu.md) |
 | 📈 **Evidence, not guesses** | Audio validity checked by spectral analysis (64 dB low/high band ratio, flatness 0.000 vs 0.56 for white noise), clock roles by edge counting, streaming integrity by exact byte accounting (`padded=0`). |
 | 🧩 **Full parameter surface** | The 121-entry XVF3800 command table is parsed from the vendor tool at runtime, so CLI, GUI and scripts stay in sync with the firmware release — no hand-copied register maps. |
-| 🎛️ **Live DSP visibility** | Thread headroom, AGC gain, per-beam speech energy, auto-select / free-running / fixed beam azimuths and DoA, refreshed several times per second. |
+| 🎛️ **Live DSP visibility** | Thread headroom, gain state, per-beam speech energy, auto-select / free-running / fixed beam azimuths and DoA, refreshed several times per second. |
 | 🛡️ **Reversible by design** | Full 8 MB flash backup/restore scripts, runtime-only parameter changes (never saved unless you ask), and a git history scrubbed of any recordings. |
 
 ## Capabilities
 
 | Capability | Status |
 |---|---|
-| Processed audio capture to WAV — 48 kHz, stereo, 16/32-bit, loss-free over USB | ✅ **Verified** |
-| XVF3800 control — read/write all 121 parameters by name over I2C | ✅ **Verified** |
-| Live DSP telemetry — AGC, VAD, DoA, beam azimuths, thread headroom | ✅ **Verified** |
-| Beamforming — auto-select, free-running scan, steerable fixed beams, output routing | ✅ **Implemented** · live steering in GUI; directivity measurement tooling included (`beam_test.py`) |
-| Acoustic echo cancellation, noise suppression, AGC, de-reverberation | ✅ **Implemented** · running on the XVF3800, tunable from the toolkit; quantitative AEC benchmark next |
-| Playback / AEC reference path (ESP32 → XVF3800 → AIC3104 → AUX) | ✅ **Implemented** · `tone` command; speaker-loop validation next |
+| Processed audio capture to WAV — 48 kHz, stereo, 16/32-bit, loss-free (I2S image, via ESP32) | ✅ **Verified** |
+| Raw 4-microphone capture — 16 kHz, plus 2 processed channels (USB 6ch image, direct to PC) | ✅ **Verified** |
+| XVF3800 control — read/write all 121 parameters by name (I2C via ESP32, or USB) | ✅ **Verified** |
+| XVF3800 firmware update over I2C (no SafeMode, no USB) | ✅ **Verified** |
+| Live DSP telemetry — VAD, DoA, beam azimuths, thread headroom | ✅ **Verified** |
+| XVF3800 beam steering — auto-select, free-running scan, fixed beams, output routing | ✅ **Verified** · live in the web console |
+| Own SRP-PHAT DoA | ✅ **Verified** · 2° median vs XVF3800 |
+| Own beamformers — delay-and-sum, MVDR, MVDR + Wiener (MWF) | ✅ **Verified** · MWF +11.4 dB SNR, STOI 0.72 → 0.80 (offline) |
 | Web console | ✅ **Verified** |
-| Standalone Wi-Fi streaming | 🗺️ Roadmap |
+| Real-time own processing · RTF steering · loudspeaker A/B vs XVF3800 | 🗺️ Roadmap |
 
-> **Verified** = measured on hardware, numbers in `logs/`. **Implemented** = running and controllable end-to-end; the quantitative benchmark is the next milestone.
+> **Verified** = measured on hardware, with the numbers and method in `logs/`.
 
 ---
 
@@ -68,7 +75,7 @@ flowchart LR
         XVF -- "I²C 0x18" --- CODEC
     end
     XVF -- "I²S out · XVF is clock master · 48 kHz" --> ESP
-    ESP -- "I²S in · playback / AEC reference" --> XVF
+    ESP -- "I²S in · playback" --> XVF
     ESP -- "I²C 0x2C · control" --> XVF
     ESP["XIAO ESP32-S3<br/>this repo's firmware<br/>(I²S slave)"] -- "USB-Serial/JTAG<br/>text shell + PCM stream" --> PC
     PC["PC<br/>Python toolkit · web console"]
@@ -81,6 +88,65 @@ flowchart LR
 | Host library | [`host/evk`](host/evk) | Serial protocol, COM auto-detection, XVF parameter table + typed encode/decode |
 | Tools | [`host/*.py`](host) | CLI, recorder, smoke test, DSP monitor, beam A/B, web console |
 | Docs & evidence | [`docs/`](docs), [`logs/`](logs) | Hardware reference with sources, bring-up plan with pass criteria, experiment logs |
+
+---
+
+## Own array processing vs. the XVF3800
+
+With the XVF3800 switched to its USB 6-channel image, channels 3–6 carry the four raw microphones (no gain, no delay). Everything below runs on those raw signals in [`host/algo`](host/algo), written from scratch in NumPy, and is compared with what the XMOS chip produces from the same capture.
+
+### 1 · Black-box characterisation of the XVF3800
+
+The DSP is closed, so its behaviour was inferred from measurements at its interfaces — not from its firmware:
+
+| Probe | Finding |
+|---|---|
+| I2S edge counting with the ESP32 port disabled | XVF3800 is the **clock master** at 48 kHz (vendor docs say slave) |
+| `DOA_VALUE` vs auto-select beam azimuth vs `AEC_MIC_ARRAY_GEO` | One shared frame: square array, 44.4 mm side, 0° = +x, counter-clockwise |
+| Output routing taps along the pipeline (raw mics → beams → post-processed) | Beam-only output: **+1.3 dB** over a single mic; fully processed output: **+14.8 dB** → most of the gain comes from post-processing *after* spatial filtering |
+| Own SRP-PHAT vs `DOA_VALUE` | Agree to **2° median** → the chip's localiser behaves like a phase-transform (PHAT-family) estimator |
+
+Working hypothesis from these probes: *beamformer → spectral post-filter → gain control*, the classic voice front-end structure. The own pipeline below follows the same structure so each stage can be measured on its own.
+
+### 2 · Direction of arrival — SRP-PHAT
+
+All 6 mic pairs, PHAT-weighted cross-spectra, 1° grid, 300–3800 Hz (spatial aliasing starts at 3.86 kHz for this array).
+
+| | Result |
+|---|---|
+| Synthetic plane waves, 24 directions | worst error 1° at 20 dB SNR, 4° at 0 dB |
+| Live speech, 4 positions around the board | **median 2°** from the XVF3800's estimate, 84 % of frames within 10° |
+
+The synthetic test caught a sign error (every estimate off by exactly 180°) before any hardware run — see [R006](logs/R006_srp_phat_doa_vs_xvf.md).
+
+### 3 · Beamforming — four methods, one fair test
+
+Talker and interferer (music) were recorded **separately** at fixed positions and summed digitally — sound adds linearly in air. Each method decides its weights and gains on the mixture only; the identical weights/gains are then applied to the speech and noise components ("shadow filtering"), giving true output SNR, speech distortion and intelligibility. Noise statistics come from a different time span than the one scored.
+
+| Method | SNR gain | Speech SDR | STOI |
+|---|---:|---:|---:|
+| Single mic | 0 dB | — | 0.723 |
+| Single mic + Wiener post-filter | +7.5 dB | 11.2 dB | 0.741 |
+| Delay-and-sum | +0.3 dB | — | 0.740 |
+| MVDR | +4.0 dB | 7.9 dB | 0.785 |
+| **MVDR + Wiener (MWF)** | **+11.4 dB** | 7.1 dB | **0.797** |
+
+*Input SNR +6.7 dB. At 0 dB input SNR the MWF gains +13.7 dB and lifts STOI from 0.56 to 0.69.* Full method and caveats: [R009](logs/R009_fair_eval_shadow_filtering.md).
+
+**What the numbers say**
+
+- **MWF is the best of the four** on both SNR and intelligibility.
+- **Intelligibility comes mainly from spatial filtering.** The Wiener filter alone buys +7.5 dB SNR but almost no STOI; MVDR buys only +4 dB SNR but the largest STOI gain.
+- **Energy-based SNR can be gamed.** Before this protocol, a naïve before/after SNR score tracked the Wiener gain floor almost 1 : 1 (+11 → +29 dB by changing one parameter), so it was replaced — [R008](logs/R008_mwf_postfilter_and_metric_limits.md).
+- **Known limitation:** MVDR uses free-field steering, which does not match the reverberant room exactly and costs some speech fidelity (SDR 7.9 dB). Relative-transfer-function steering is the next step.
+- The XVF3800 cannot be shadow-filtered (closed DSP), so it is not in this table; a loudspeaker A/B against it is on the roadmap.
+
+```powershell
+python -m algo.test_algo                                   # synthetic checks (run in host/)
+python host\doa_live.py --sec 10 --label 1                 # own vs XVF DoA, saves 6ch WAV + CSV
+python host\doa_eval.py                                    # summarise labelled DoA runs
+python host\mix_eval.py <speech.wav> <noise.wav> [--snr 0] # fair beamformer comparison
+```
 
 ---
 
@@ -119,6 +185,23 @@ SMOKE PASS
 
 All tools auto-detect the XIAO's COM port; override with `--port COMx` or `EVK_PORT=COMx`. Only one program can hold the port at a time.
 
+### XVF3800 firmware modes
+
+The XVF3800 runs one of two images; switch between them over I2C through the ESP32 (no SafeMode button or USB link to the chip needed):
+
+| Image | Audio path | Use it for |
+|---|---|---|
+| I2S, 48 kHz (`i2s/respeaker_flex_i2s_c48k2ch_*.bin`) | processed stereo → ESP32 → PC | web console recording, ESP32 integration |
+| USB 6ch, 16 kHz (`usb/v1.0.4/respeaker_flex_usb_c16k6ch_v1.0.4.bin`) | 2 processed + 4 raw mics → PC directly (core-board USB-C) | own algorithms (`host/algo`) |
+
+```powershell
+python host\xvf_i2c_dfu.py --status
+python host\xvf_i2c_dfu.py third_party\reSpeaker_Flex\xmos_firmwares\usb\v1.0.4\respeaker_flex_usb_c16k6ch_v1.0.4.bin
+python host\xvf_i2c_dfu.py third_party\reSpeaker_Flex\xmos_firmwares\i2s\v1.0.4\respeaker_flex_i2s_c48k2ch_v1.0.4.bin
+```
+
+Only the upgrade partition is written; the factory image cannot be overwritten, and the bootloader falls back to it if an upgrade image is invalid.
+
 ---
 
 ## Toolkit
@@ -129,7 +212,7 @@ All tools auto-detect the XIAO's COM port; override with `--port COMx` or `EVK_P
 |---|---|
 | Levels | Live L/R RMS + peak (dBFS) and a 20 s history trace |
 | Beam / DoA compass | Mic geometry, auto-select beam, free-running scan beam, fixed beams and DoA (lit when speech is detected) |
-| DSP telemetry | AGC gain, AEC convergence, AEC/PP thread headroom (current and minimum), per-beam speech energy |
+| DSP telemetry | DSP thread headroom (current and minimum), gain and convergence flags, per-beam speech energy |
 | Recording | One-click capture, in-page playback, waveform, recent takes |
 | Beamforming control | Output-routing presets (processed / raw mics / fixed beams → L/R) and a live azimuth slider |
 | Parameters | All 121 XVF3800 parameters: search, read, write (with confirmation for reboot/flash-writing commands) |
@@ -139,8 +222,8 @@ Built on the Python standard library (`http.server` + one poller thread owning t
 ### Command line
 
 ```powershell
-python host\evk_cli.py list AGC                  # browse parameters
-python host\evk_cli.py get AEC_AZIMUTH_VALUES    # read by name
+python host\evk_cli.py list DOA                  # browse parameters
+python host\evk_cli.py get DOA_VALUE             # read by name
 python host\evk_cli.py set LED_EFFECT 3          # write by name (runtime only)
 python host\evk_cli.py dsp --watch               # DSP health line, live
 python host\evk_cli.py doa --watch               # direction of arrival, live
@@ -160,7 +243,8 @@ Every command ends with exactly one `OK …` / `ERR …` line, so it is equally 
 | `clkprobe` | Detects externally driven BCLK/WS — tells you who the clock master is |
 | `stat [ms]` | Per-channel RMS / peak / non-zero count |
 | `rec <ms> [16\|32]` | Binary PCM stream: `REC rate=… ch=2 bits=… bytes=N` + N bytes + `OK rec frames=… padded=…` |
-| `tone <hz> <ms> [dbfs]` | Sine to the XVF3800 I2S input (playback / AEC reference) |
+| `tone <hz> <ms> [dbfs]` | Sine to the XVF3800 I2S input (playback path) |
+| `dfu status\|begin\|blk <seq> <hex> <sum16>\|end\|abort\|detach` | XVF3800 firmware update over I2C (driven by `host/xvf_i2c_dfu.py`) |
 
 Pin map, I2C protocol, USB ports and the XMOS image catalogue: [`docs/hardware.md`](docs/hardware.md).
 
@@ -176,18 +260,22 @@ The bring-up was run as a sequence of gated stages — one change at a time, a b
 | B0.5 Full-flash backup | ✅ | [R002](logs/R002_xiao_flash_backup.md) |
 | B1 Shell · B2 I2C control · B3 I2S capture | ✅ — XVF3800 is the I2S clock master; ESP32 runs as slave at 48 kHz | [R003](logs/R003_i2s_role_xvf_is_master.md) |
 | B4 Recording to WAV | ✅ — loss-free stream, speech confirmed | [R003](logs/R003_i2s_role_xvf_is_master.md) |
-| DSP health | ✅ — no bypass, ample thread headroom, beamformer / AGC / VAD / DoA live | [R004](logs/R004_xvf_dsp_health.md) |
-| B5 AEC benchmark with speaker loop | ⏭️ next | |
-| B6 DoA accuracy & beam directivity numbers | ⏭️ next (tooling ready) | |
-| B7 USB UAC2 mode / 6-channel raw mics | ⏭️ optional | |
+| DSP health | ✅ — no bypass, ample thread headroom, beamformer / VAD / DoA live | [R004](logs/R004_xvf_dsp_health.md) |
+| B7 USB 6ch image via own I2C DFU | ✅ — raw 4-mic capture, 0-retry flash after fixing the serial RX buffer | [R005](logs/R005_xvf_usb6ch_via_i2c_dfu.md) |
+| A1 Own SRP-PHAT DoA vs XVF3800 | ✅ — 2° median agreement | [R006](logs/R006_srp_phat_doa_vs_xvf.md) |
+| A2 Own beamformers in a real room | ✅ — MVDR +4.9 dB; XVF beam-only +1.3 dB, full chain +14.8 dB | [R007](logs/R007_beamformer_vs_xvf.md) |
+| A3 Wiener post-filter & metric audit | ✅ — naive SNR shown to be gameable | [R008](logs/R008_mwf_postfilter_and_metric_limits.md) |
+| A4 Fair evaluation (shadow filtering) | ✅ — MWF best: +11.4 dB, STOI 0.72 → 0.80 | [R009](logs/R009_fair_eval_shadow_filtering.md) |
+| Next | ⏭️ real-time processing with online noise estimation · RTF steering · loudspeaker A/B against the XVF3800 | |
 
-Full stage definitions and pass criteria: [`docs/bringup_plan.md`](docs/bringup_plan.md).
+Bring-up stage definitions and pass criteria: [`docs/bringup_plan.md`](docs/bringup_plan.md).
 
 ## Repository layout
 
 ```
 firmware/xiao_esp32s3/   ESP32-S3 firmware (PlatformIO, Arduino core)
-host/                    Python toolkit, web console (host/gui/), library (host/evk/)
+host/                    Python toolkit, web console (host/gui/), device library (host/evk/)
+host/algo/               Own array processing: geometry, SRP-PHAT, DAS / MVDR / Wiener, synthetic tests
 scripts/                 Build/flash wrapper, flash backup & restore, vendor fetch
 docs/                    Hardware reference, bring-up plan, screenshots
 logs/                    R0XX experiment logs
