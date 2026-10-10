@@ -8,8 +8,8 @@
 | 關卡 | 目標 | 怎麼測 | PASS 條件 |
 |---|---|---|---|
 | **B0** 環境 | PC 看得到板子、工具都在 | `py -3.11 host\env_check.py` | 看到 `303A:1001`，pio / esptool 都 OK |
-| **B0.5** 備份 | 保住出廠 ESP32 韌體 | `.\scripts\backup_xiao_flash.ps1 -Port COM8` | 得到 8 MB `.bin` 和 sha256 |
-| **B1** 燒 shell | ESP32 跑我們的韌體 | `.\scripts\pio.ps1 run -t upload --upload-port COM8`，再跑 `evk_cli.py raw info` | 回應 `OK info` |
+| **B0.5** 備份 | 保住出廠 ESP32 韌體 | `.\scripts\backup_xiao_flash.ps1` | 得到 8 MB `.bin` 和 sha256 |
+| **B1** 燒 shell | ESP32 跑我們的韌體 | `.\scripts\pio.ps1 run -t upload`，再跑 `evk_cli.py raw info` | 回應 `OK info` |
 | **B2** I2C | ESP32 可以控制 XVF3800 | `evk_cli.py raw i2cscan`、`evk_cli.py get VERSION` | 掃到 0x2C（和 0x18），VERSION 有值 |
 | **B3** I2S 收音 | 收到 XVF 送出的處理後音訊（ESP32 = slave） | `evk_cli.py raw clkprobe`、`evk_cli.py raw "i2s start"`、`evk_cli.py raw "stat 1000"` | WS ≈ 48 kHz；安靜時 RMS < −15 dBFS；講話時比安靜時高 ≥ 15 dB |
 | **B4** 錄音落地 | 錄成 WAV，可以聽 | `py -3.11 host\record_wav.py --sec 5` | 檔案能播放，`padded=0` |

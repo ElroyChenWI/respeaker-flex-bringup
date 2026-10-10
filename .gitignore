@@ -11,8 +11,8 @@ __pycache__/
 third_party/*
 !third_party/README.md
 
-# captures: keep R0XX evidence, drop bulk recordings and flash dumps
+# captures: recordings and flash dumps stay local (they can contain voices / firmware).
+# Explicit names only - Windows git is case-insensitive, so "R*" would also match "rec_*".
 captures/*
-!captures/R*
 !captures/README.md
-captures/xiao_flash_backup_*.bin
+!captures/R001_com8_factory_10s.bin

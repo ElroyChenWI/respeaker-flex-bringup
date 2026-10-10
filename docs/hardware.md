@@ -5,7 +5,7 @@
 ## 系統方塊
 
 ```
- 4-mic array ──PDM──▶ XMOS XVF3800 ──I2S──▶ XIAO ESP32S3 ──USB-Serial/JTAG──▶ PC (COM8)
+ 4-mic array ──PDM──▶ XMOS XVF3800 ──I2S──▶ XIAO ESP32S3 ──USB-Serial/JTAG──▶ PC (COMx)
  (圓形 44mm /        (AEC/BF/NS/AGC/DoA)  ◀─I2S──  (I2S master)
   線性 33mm)              │  ▲                 │
                           │  └──── I2C 0x2C ───┤  (控制指令)

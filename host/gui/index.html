@@ -259,7 +259,7 @@ let last = null;
 function renderStatus(s) {
   last = s;
   const conn = $("conn");
-  if (s.connected) { conn.textContent = "已連線 COM"; conn.className = "pill ok"; }
+  if (s.connected) { conn.textContent = "已連線 " + (s.port || ""); conn.className = "pill ok"; }
   else { conn.textContent = "未連線" + (s.error ? "：" + s.error : ""); conn.className = "pill bad"; }
   $("build").textContent = s.xvf_build ? `XVF ${s.xvf_version} · ${s.xvf_build}` : "—";
   $("busy").hidden = !s.busy; $("busy").textContent = s.busy || "";

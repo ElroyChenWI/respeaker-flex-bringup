@@ -4,7 +4,7 @@
     {
       "name": "evk-gui",
       "runtimeExecutable": "py",
-      "runtimeArgs": ["-3.11", "host/evk_gui.py", "--port", "COM8", "--http", "8765"],
+      "runtimeArgs": ["-3.11", "host/evk_gui.py", "--http", "8765"],
       "port": 8765
     }
   ]

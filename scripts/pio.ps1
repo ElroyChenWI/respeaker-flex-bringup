@@ -1,10 +1,10 @@
-# Run PlatformIO from the user's local install (pio is not on PATH).
-# Usage (from repo root):  .\scripts\pio.ps1 run
-#                          .\scripts\pio.ps1 run -t upload --upload-port COM8
-#                          .\scripts\pio.ps1 device monitor -p COM8
+# Run PlatformIO inside firmware\xiao_esp32s3 (works whether or not pio is on PATH).
+# Usage (from repo root):  .\scripts\pio.ps1 run                  # build
+#                          .\scripts\pio.ps1 run -t upload        # build + flash (port auto-detected)
+#                          .\scripts\pio.ps1 device monitor       # serial console, type 'help'
 $ErrorActionPreference = 'Stop'
-$pio = Join-Path $env:USERPROFILE '.platformio\penv\Scripts\pio.exe'
-if (-not (Test-Path $pio)) { throw "PlatformIO not found at $pio" }
+. "$PSScriptRoot\evk_common.ps1"
+$pio = Get-Pio
 $proj = Join-Path $PSScriptRoot '..\firmware\xiao_esp32s3'
 Push-Location $proj
 try { & $pio @args; exit $LASTEXITCODE } finally { Pop-Location }

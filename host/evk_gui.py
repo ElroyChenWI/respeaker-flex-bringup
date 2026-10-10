@@ -2,7 +2,7 @@
 
   py -3.11 host/evk_gui.py            -> http://127.0.0.1:8765
 
-One process owns COM8. A poller thread refreshes levels + XVF3800 DSP state;
+One process owns the XIAO serial port (auto-detected, or --port). A poller thread refreshes levels + XVF3800 DSP state;
 HTTP handlers share the serial link through a lock (recording pauses polling).
 """
 from __future__ import annotations
@@ -52,7 +52,7 @@ class Evk:
             self.link.command("i2s start", timeout=10)
             ver = xvf_get(self.link, self.table["VERSION"])
             bld = xvf_get(self.link, self.table["BLD_MSG"])
-            self.status.update(connected=True, info=info + [reply], xvf_version=".".join(map(str, ver)), xvf_build=bld)
+            self.status.update(connected=True, port=self.link.port, info=info + [reply], xvf_version=".".join(map(str, ver)), xvf_build=bld)
 
     def drop(self, err: Exception) -> None:
         if self.link:

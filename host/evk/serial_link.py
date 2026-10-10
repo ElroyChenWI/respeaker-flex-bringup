@@ -1,13 +1,17 @@
 """Serial link to the XIAO ESP32S3 bring-up shell (firmware/xiao_esp32s3)."""
 from __future__ import annotations
 
+import os
 import re
 import time
 from dataclasses import dataclass
 
 import serial
+from serial.tools import list_ports
 
-DEFAULT_PORT = "COM8"
+# None = auto: $EVK_PORT, else the first XIAO ESP32S3 USB-Serial/JTAG (303A:1001).
+DEFAULT_PORT = None
+XIAO_VID_PID = (0x303A, 0x1001)
 _REC_HEADER = re.compile(rb"REC rate=(\d+) ch=(\d+) bits=(\d+) bytes=(\d+)")
 
 
@@ -24,10 +28,20 @@ class Recording:
     trailer: str  # "OK rec frames=... padded=..."
 
 
+def find_port() -> str:
+    if os.environ.get("EVK_PORT"):
+        return os.environ["EVK_PORT"]
+    for p in list_ports.comports():
+        if (p.vid, p.pid) == XIAO_VID_PID:
+            return p.device
+    raise EvkError("XIAO ESP32S3 (USB 303A:1001) not found - plug in the XIAO USB-C or pass --port")
+
+
 class EvkSerial:
-    def __init__(self, port: str = DEFAULT_PORT, timeout: float = 2.0):
+    def __init__(self, port: str | None = DEFAULT_PORT, timeout: float = 2.0):
         s = serial.Serial()
-        s.port = port
+        s.port = port or find_port()
+        self.port = s.port
         s.baudrate = 115200  # ignored by USB-Serial/JTAG
         s.timeout = timeout
         # Do not toggle DTR/RTS: on the ESP32-S3 USB-Serial/JTAG that resets the chip.
