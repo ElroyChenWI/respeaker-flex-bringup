@@ -20,8 +20,8 @@
 - 晶片：ESP32-S3 (QFN56) rev v0.2，8 MB flash + 8 MB PSRAM，MAC `68:ee:8f:46:45:b0`
 - Partition table（`default_8MB.csv`）：nvs 0x9000、otadata 0xe000、app0 0x10000、app1 0x340000、spiffs 0x670000、coredump 0x7f0000
 - **重要：板子上原本跑的不是 Seeed 出廠韌體。**
-  - app 裡的字串路徑是 `C:/Users/Elroy's PC/.platformio/...` 和 `.pio/libdeps/xiao_esp32s3/audio-tools/...`，代表是在這台電腦上編出來的
-  - 對應的專案：`D:\FoxLink\Jason_Test\XMOS\src\main.cpp`（2026-09-07）
+  - app 裡的字串路徑是 `C:/Users/<user>/.platformio/...` 和 `.pio/libdeps/xiao_esp32s3/audio-tools/...`，代表是在這台電腦上編出來的
+  - 對應的專案：本機先前的一個 PlatformIO 專案（`XMOS/src/main.cpp`，2026-09-07；不在本 repo）
   - 它的做法：ESP32 當 I2S master，16 kHz、2ch、32-bit。讀到的每個 int32 都 `>>16` 轉成 int16，L/R 交錯著往 Serial 送
   - 所以 R001 看到的 38.9 KB/s 串流，就是這支程式的輸出
 
