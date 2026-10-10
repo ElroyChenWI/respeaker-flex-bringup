@@ -19,3 +19,6 @@ captures/*
 
 # downloaded host tools (dfu-util etc.)
 tools/
+
+# personal prep notes (not published)
+prep/
