@@ -53,6 +53,7 @@ class Evk:
             ver = xvf_get(self.link, self.table["VERSION"])
             bld = xvf_get(self.link, self.table["BLD_MSG"])
             self.status.update(connected=True, port=self.link.port, info=info + [reply], xvf_version=".".join(map(str, ver)), xvf_build=bld)
+            self.status.pop("error", None)  # a stale error from a previous disconnect would read as "offline"
 
     def drop(self, err: Exception) -> None:
         if self.link:

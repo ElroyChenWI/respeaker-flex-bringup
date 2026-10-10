@@ -288,7 +288,8 @@ function renderStatus(s) {
   if (document.activeElement !== $("fixedOn")) $("fixedOn").checked = !!s.fixed_beams;
 }
 async function loop() {
-  try { renderStatus(await api("/api/status")); } catch (e) { renderStatus({ connected: false, error: "GUI server 沒回應" }); }
+  // status reports device errors in its body; only a failed request means the server is gone
+  try { renderStatus(await (await fetch("/api/status")).json()); } catch (e) { renderStatus({ connected: false, error: "GUI server 沒回應" }); }
   setTimeout(loop, 200);
 }
 $("pollToggle").onchange = (e) => api("/api/poll", { enabled: e.target.checked }).catch(() => {});
