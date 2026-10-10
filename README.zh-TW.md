@@ -173,17 +173,19 @@ python host\mix_eval.py <speech.wav> <noise.wav> [--snr 0] # 公平的 beamforme
 
 ### XVF3800 的兩種韌體
 
-XVF3800 可以跑兩種映像檔，透過 ESP32 用 I2C 切換（不需要 SafeMode 鈕，也不需要接 XVF 的 USB）：
+XVF3800 可以跑兩種映像檔。兩個方向要用不同的方式切換，因為 **USB 版韌體不回應 I2C**（實測，見 [R010](logs/R010_restore_i2s_via_usb_dfu.md)）：
 
 | 映像檔 | 音訊路徑 | 用途 |
 |---|---|---|
-| I2S 48 kHz（`i2s/respeaker_flex_i2s_c48k2ch_*.bin`） | 處理後的立體聲 → ESP32 → PC | GUI 錄音、ESP32 整合 |
+| I2S 48 kHz（`i2s/respeaker_flex_i2s_c48k2ch_v1.0.0.bin`，出廠版本） | 處理後的立體聲 → ESP32 → PC | GUI 錄音、ESP32 整合 |
 | USB 6ch 16 kHz（`usb/v1.0.4/respeaker_flex_usb_c16k6ch_v1.0.4.bin`） | 2 聲道處理後 + 4 支原始麥克風 → 直接進 PC（核心板的 USB-C） | 自己的演算法（`host/algo`） |
 
 ```powershell
-python host\xvf_i2c_dfu.py --status
+# I2S → USB 6ch：透過 ESP32 走 I2C（不需要 SafeMode 鈕，也不需要接 XVF 的 USB）
 python host\xvf_i2c_dfu.py third_party\reSpeaker_Flex\xmos_firmwares\usb\v1.0.4\respeaker_flex_usb_c16k6ch_v1.0.4.bin
-python host\xvf_i2c_dfu.py third_party\reSpeaker_Flex\xmos_firmwares\i2s\v1.0.4\respeaker_flex_i2s_c48k2ch_v1.0.4.bin
+
+# USB 6ch → I2S：接核心板的 USB-C，用 dfu-util 0.11（Windows 11 不用另外裝驅動）
+dfu-util -R -e -a 1 -D third_party\reSpeaker_Flex\xmos_firmwares\i2s\respeaker_flex_i2s_c48k2ch_v1.0.0.bin
 ```
 
 只會寫入升級區；出廠映像檔不能被覆寫，升級映像檔無效時 bootloader 會退回出廠映像檔。

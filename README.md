@@ -202,17 +202,19 @@ All tools auto-detect the XIAO's COM port; override with `--port COMx` or `EVK_P
 
 ### XVF3800 firmware modes
 
-The XVF3800 runs one of two images; switch between them over I2C through the ESP32 (no SafeMode button or USB link to the chip needed):
+The XVF3800 runs one of two images. The two directions use different transports, because the USB image does not answer on I2C (measured, [R010](logs/R010_restore_i2s_via_usb_dfu.md)):
 
 | Image | Audio path | Use it for |
 |---|---|---|
-| I2S, 48 kHz (`i2s/respeaker_flex_i2s_c48k2ch_*.bin`) | processed stereo → ESP32 → PC | web console recording, ESP32 integration |
+| I2S, 48 kHz (`i2s/respeaker_flex_i2s_c48k2ch_v1.0.0.bin`, as shipped) | processed stereo → ESP32 → PC | web console recording, ESP32 integration |
 | USB 6ch, 16 kHz (`usb/v1.0.4/respeaker_flex_usb_c16k6ch_v1.0.4.bin`) | 2 processed + 4 raw mics → PC directly (core-board USB-C) | own algorithms (`host/algo`) |
 
 ```powershell
-python host\xvf_i2c_dfu.py --status
+# I2S -> USB 6ch: over I2C through the ESP32 (no SafeMode button or XVF USB link needed)
 python host\xvf_i2c_dfu.py third_party\reSpeaker_Flex\xmos_firmwares\usb\v1.0.4\respeaker_flex_usb_c16k6ch_v1.0.4.bin
-python host\xvf_i2c_dfu.py third_party\reSpeaker_Flex\xmos_firmwares\i2s\v1.0.4\respeaker_flex_i2s_c48k2ch_v1.0.4.bin
+
+# USB 6ch -> I2S: over USB DFU on the core-board USB-C (dfu-util 0.11, no extra driver needed on Windows 11)
+dfu-util -R -e -a 1 -D third_party\reSpeaker_Flex\xmos_firmwares\i2s\respeaker_flex_i2s_c48k2ch_v1.0.0.bin
 ```
 
 Only the upgrade partition is written; the factory image cannot be overwritten, and the bootloader falls back to it if an upgrade image is invalid.

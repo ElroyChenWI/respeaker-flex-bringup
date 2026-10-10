@@ -61,5 +61,5 @@
 
 - **B7 PASS**：不需要 SafeMode 鈕，也不需要先接 USB，透過 ESP32 用 **I2C DFU** 就能更新 XVF 韌體
 - 現在 XVF = USB 6ch v1.0.4。ESP32 的 I2S 路徑不再有音訊；ESP32 的 shell 和 I2C 控制還在
-- 刷回 I2S：`xvf_i2c_dfu.py third_party/.../i2s/respeaker_flex_i2s_c48k2ch_v1.0.0.bin`；或在 USB 模式下用 dfu-util
+- 刷回 I2S：~~用 `xvf_i2c_dfu.py`~~ → **錯誤**：USB 韌體不回應 I2C，只能用 USB DFU（dfu-util）刷回去，見 R010
 - 下一步：用 4 支原始麥克風訊號自己做 GCC-PHAT DoA 和 beamforming，跟 XVF 的 `DOA_VALUE` 及 ch1/2 比較
