@@ -18,7 +18,8 @@ from .array import arrival_delays
 @dataclass
 class DoaResult:
     azimuth: float        # degrees, array convention (0 = +x, CCW)
-    confidence: float     # peak-to-mean ratio of the SRP map (>~2 means a clear source)
+    confidence: float     # coherence at the peak, 0..1: mean over pairs/bins of the phase match
+                          # (1 = every pair agrees perfectly; diffuse noise stays near 0)
     power_db: float       # frame power of the mic average, dBFS
     srp: np.ndarray       # SRP value per grid azimuth (for plotting)
 
@@ -50,5 +51,7 @@ class SrpPhat:
         # remove the steering phase; a true source makes all terms real and positive
         srp = np.real(np.einsum("fp,afp->a", cross, np.conj(self._steer)))
         k = int(np.argmax(srp))
-        conf = float((srp[k] - srp.mean()) / (srp.std() + 1e-12))
-        return DoaResult(float(self.grid[k]), conf, 10 * np.log10(power + 1e-20), srp)
+        # A peak-to-mean "z-score" was tried first and never exceeded ~2.5 on a 4-mic map (R006),
+        # so use the normalised SRP value instead: it is bounded and physically meaningful.
+        coherence = float(srp[k] / (len(self.pairs) * len(self.freqs)))
+        return DoaResult(float(self.grid[k]), coherence, 10 * np.log10(power + 1e-20), srp)

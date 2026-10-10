@@ -15,6 +15,7 @@ import argparse
 import csv
 import sys
 import time
+import wave
 from datetime import datetime
 from pathlib import Path
 
@@ -50,8 +51,9 @@ def main() -> int:
     ap.add_argument("--wav", type=Path, help="process a 6ch 16 kHz WAV instead of the live device")
     ap.add_argument("--sec", type=float, default=0, help="stop after N seconds (live); 0 = until Ctrl+C")
     ap.add_argument("--label", type=float, help="true source azimuth (deg) for this run, stored in the CSV")
-    ap.add_argument("--min-conf", type=float, default=3.0)
-    ap.add_argument("--margin-db", type=float, default=6.0)
+    ap.add_argument("--min-conf", type=float, default=0.4, help="min SRP coherence 0..1 (quiet room p50 ~0.34, R006)")
+    ap.add_argument("--margin-db", type=float, default=10.0, help="min level above the tracked noise floor")
+    ap.add_argument("--no-wav", action="store_true", help="do not save the raw 6ch audio next to the CSV")
     args = ap.parse_args()
 
     doa = SrpPhat(FLEX_CIRCULAR_MICS, FS, nfft=NFFT)
@@ -65,19 +67,22 @@ def main() -> int:
         for k in range(0, len(x) - NFFT, HOP):
             r = doa.process(x[k:k + NFFT])
             ok = gate(r.power_db, r.confidence)
-            rows.append([k / FS, round(r.azimuth, 1), round(r.confidence, 2), round(r.power_db, 1), int(ok), "", "", "", args.label])
+            rows.append([k / FS, round(r.azimuth, 1), round(r.confidence, 3), round(r.power_db, 1), int(ok), "", "", "", args.label])
             if ok:
                 valid.append(r.azimuth)
     else:
         xvf = XvfUsb()
         buf = np.zeros((NFFT, 4), np.float32)
+        audio = []
         t0 = time.monotonic()
         last_print, last_xvf = 0.0, (None, None, None)
-        print(f"{'t':>6} | {'own az':>6} {'conf':>5} {'dBFS':>6} ok | {'XVF doa':>7} sp | {'XVF beam':>8}")
+        print(f"{'t':>6} | {'own az':>6} {'coh':>5} {'dBFS':>6} ok | {'XVF doa':>7} sp | {'XVF beam':>8}")
         try:
             with LiveCapture(block=HOP) as cap:
                 while not args.sec or time.monotonic() - t0 < args.sec:
-                    blk = cap.q.get(timeout=2)[:, RAW_MIC_CHANNELS]
+                    blk6 = cap.q.get(timeout=2)
+                    audio.append(blk6)
+                    blk = blk6[:, RAW_MIC_CHANNELS]
                     buf = np.vstack([buf[len(blk):], blk])
                     r = doa.process(buf)
                     ok = gate(r.power_db, r.confidence)
@@ -86,9 +91,9 @@ def main() -> int:
                         d, sp = xvf.doa()
                         last_xvf = (d, sp, round(xvf.auto_beam_deg(), 1))
                         last_print = t
-                        print(f"{t:6.1f} | {r.azimuth:6.0f} {r.confidence:5.1f} {r.power_db:6.1f} {'Y ' if ok else '. '} | "
+                        print(f"{t:6.1f} | {r.azimuth:6.0f} {r.confidence:5.2f} {r.power_db:6.1f} {'Y ' if ok else '. '} | "
                               f"{d:7d} {sp:2d} | {last_xvf[2]:8.1f}", flush=True)
-                    rows.append([round(t, 3), round(r.azimuth, 1), round(r.confidence, 2), round(r.power_db, 1), int(ok),
+                    rows.append([round(t, 3), round(r.azimuth, 1), round(r.confidence, 3), round(r.power_db, 1), int(ok),
                                  *last_xvf, args.label])
                     if ok:
                         valid.append(r.azimuth)
@@ -98,10 +103,17 @@ def main() -> int:
             xvf.close()
         if cap.overflows:
             print(f"warning: {cap.overflows} audio overflows")
+        if audio and not args.no_wav:
+            x = (np.clip(np.vstack(audio), -1, 1 - 2**-31) * 2**31).astype(np.int32)
+            with wave.open(str(out.with_suffix(".wav")), "wb") as w:
+                w.setnchannels(6)
+                w.setsampwidth(4)
+                w.setframerate(FS)
+                w.writeframes(x.tobytes())
 
     with open(out, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["t", "own_az", "own_conf", "own_dbfs", "own_valid", "xvf_doa", "xvf_speech", "xvf_beam_az", "true_az"])
+        w.writerow(["t", "own_az", "own_coh", "own_dbfs", "own_valid", "xvf_doa", "xvf_speech", "xvf_beam_az", "true_az"])
         w.writerows(rows)
     summary = f"{len(valid)}/{len(rows)} valid frames"
     if valid:
