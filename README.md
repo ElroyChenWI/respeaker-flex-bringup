@@ -309,6 +309,7 @@ third_party/             Seeed reSpeaker_Flex, fetched at a pinned commit (git-i
 | `stat` reports no samples | Run `clkprobe`; if `ws_hz` is not ~48000, press the core board's RST to restart the XVF3800 |
 | `could not open port` | Another program (GUI, serial monitor, Arduino IDE) holds the COM port |
 | Wrong pitch / speed | In slave mode the XVF image sets the rate (`inthost-lr48` → 48 kHz); pass `--rate 16000` for a 16 kHz image |
+| `ver` fails with `status=5`, no I2S clock, but `dfu status` answers `state=2` | The XVF3800 stayed in its bootloader after power-up. Reboot it into the application with `python host\evk_cli.py raw "dfu detach"` (writes nothing), then re-run `smoke` ([R011](logs/R011_xvf_stuck_in_bootloader.md)) |
 | `third_party/... missing` | Run `.\scripts\fetch_vendor.ps1` |
 
 ## References

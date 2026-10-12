@@ -446,6 +446,7 @@ REC rate=48000 ch=2 bits=16 bytes=<N>\n
 | `could not open port` / `Access denied` | COM port 被別的程式佔用：GUI、serial monitor、Arduino IDE。先關掉它們 |
 | `smoke` 的 B2 失敗（找不到 0x2C） | XVF 還在開機，或 I2C 沒接好。等幾秒再試，或按 RST |
 | 取樣率不對、聲音變快或變慢 | slave 模式下取樣率由 XVF 決定。這塊板子的 XVF 韌體是 `inthost-lr48`，所以是 48 kHz。如果 XVF 刷成 16k 韌體，錄音時要加 `--rate 16000` |
+| `ver` 回 `status=5`、沒有 I2S 時脈，但 `dfu status` 回 `state=2` | XVF 開機後停在 bootloader，沒進入應用程式。用 `py -3.11 host\evk_cli.py raw "dfu detach"` 讓它重開機（不會寫入任何東西），再跑一次 `smoke`（[R011](logs/R011_xvf_stuck_in_bootloader.md)） |
 | `third_party/... missing` | 還沒跑 `.\scripts\fetch_vendor.ps1` |
 | 備份 flash 很慢 | 正常。USB-Serial/JTAG 讀 8 MB 大約要 12 分鐘 |
 | 想回到買來時的 ESP32 韌體 | 用第 4 步的備份：`.\scripts\restore_xiao_flash.ps1 <備份檔>` |
